@@ -1,0 +1,164 @@
+import sys, os, pickle
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
+import numpy as np, h5py, scipy, scipy.stats, emcee, tqdm
+from multiprocessing import Pool
+from copy import deepcopy as copy
+
+sys.path.append('../utilities/')
+import distributions
+import samplers
+
+
+def dwarf_magnitude(M, alpha1=-0.5, alpha2=-1.,
+                 Mto=4., Mms=8., Mms1=9., Mms2=7., Mx=10.):
+
+    M = M[0]
+    if (M<Mto)|(M>Mx): return -1e30
+
+    ep1=1.3; ep2=2.3;
+    a1=-np.log(10)*(ep1-1)/(2.5*alpha1); a2=-np.log(10)*(ep2-1)/(2.5*alpha2);
+
+    alphag = (np.log(a1/a2) - alpha1*(Mms-Mms1) + alpha2*(Mms-Mms2))/(Mms1-Mms2)
+    Ag = 1/a1 * np.exp((alpha1-alphag)*(Mms-Mms1))
+
+    if M>Mms1: return - np.log(a1) + alpha1*(Mms-M)
+    elif M>Mms2: return np.log(Ag) + alphag*(Mms-M)
+    elif M>Mto: return - np.log(a2) + alpha2*(Mms-M)
+    else: raise ValueError('No good mag range')
+
+def giant_magnitude(M, alpha3=-0.5, Mto=4.):
+
+    M = M[0]
+    if (M>Mto): return -1e30
+
+    else: return -alpha3*M
+
+def disk_pos(s, sinb, hz=1., R0=8.27, theta_deg=60):
+
+    if (sinb<np.sin(np.deg2rad(theta_deg)))|(sinb>1)|(s<0): return -1e30
+
+    return 2*np.log(s) - s*sinb/hz
+
+def halo_pos(s, sinb, hz=1., R0=8.27, theta_deg=60):
+
+    if (sinb<np.sin(np.deg2rad(theta_deg)))|(sinb>1)|(s<0): return -1e30
+
+    return 2*np.log(s) - hz/2*np.log((s*sinb)**2 + R0**2)
+
+if __name__=='__main__':
+
+    #%% Initialis model parameters
+
+    burnt_samples = {}
+    for j in range(3):
+        burnt_samples[j]={}
+
+    selected_samples = {}
+    for j in range(3):
+        selected_samples[j]={}
+
+    nsample = 100000
+    ncores=10
+    nstep=int(nsample/30 * 2 * 5)
+    print('Nsample: ', nsample)
+
+    alpha1=-0.15; alpha2=-0.3
+    Mms=8.; Mms1=9.; Mms2=7.; Mx=10.7
+    R0=8.27; theta_deg=60
+    global_params = {'alpha1':alpha1, 'alpha2':alpha2,
+                        'Mms':Mms, 'Mms1':Mms1, 'Mms2':Mms2, 'Mx':Mx,
+                        'R0':R0, 'theta_deg':theta_deg}
+
+    params = {0: {'hz':0.9, 'alpha3':-1.,  'Mto':4.8, 'fD':0.94, 'w':0.2},
+              1: {'hz':1.9, 'alpha3':-0.5, 'Mto':3.14, 'fD':0.998, 'w':0.3},
+              2: {'hz':4.6, 'alpha3':-0.6,  'Mto':3.3, 'fD':0.995,  'w':0.5}}
+
+    params = {0: {'hz':0.9, 'alpha3':-0.1,  'Mto':9.5, 'fD':0., 'w':0.2},
+              1: {'hz':1.9, 'alpha3':-0.3, 'Mto':10.7, 'fD':0., 'w':0.3},
+              2: {'hz':4.6, 'alpha3':-0.1,  'Mto':10.0, 'fD':0.,  'w':0.5}}
+    print(params)
+
+    weights = np.array([params[j]['w'] for j in range(3)])
+    j_nsample = np.round(weights * nsample).astype(int)
+    j_nsample[-1] = nsample-np.sum(j_nsample[:-1])
+
+    fdwarf = np.array([params[j]['fD'] for j in range(3)])
+    j_ndwarf = np.round(j_nsample * fdwarf).astype(int)
+    j_ngiant = j_nsample - np.round(j_nsample * fdwarf).astype(int)
+
+
+
+    #%% Magnitude distribution sampling
+    nwalkers=30; ndim=1;
+    for j in range(3):
+        print('Giant %d' % j)
+        def loglike(x):
+            return giant_magnitude(x, alpha3=params[j]['alpha3'], Mto=params[j]['Mto'])
+
+        p0_walkers = np.random.rand(nwalkers,1) * params[j]['Mto']
+
+        with Pool(ncores) as pool:
+            sampler = emcee.EnsembleSampler(nwalkers, ndim, loglike, pool=pool)
+            for pos,lnp,rstate in tqdm.tqdm(sampler.sample(p0_walkers, iterations=nstep), total=nstep):
+                pass
+
+        burnt_samples[j]['M_giants'] = np.reshape(sampler.chain[:, int(nstep/2):, :][:,::3,:], (-1,1)).copy().T[0]
+
+
+    for j in range(3):
+        giant_sample = np.random.choice(np.arange(burnt_samples[j]['M_giants'].shape[0]), j_ngiant[j], replace=False)
+
+        order = np.random.choice(np.arange(len(giant_sample)), size=len(giant_sample), replace=False)
+        selected_samples[j]['M'] = burnt_samples[j]['M_giants'][giant_sample][order]
+
+
+    #%% Position distribution sampling
+    functions = [disk_pos, disk_pos, halo_pos]
+
+    nwalkers=30; ndim=2;
+    for j in range(3):
+        print('Spatial %d' % j)
+        def loglike(x):
+            return functions[j](x[0], x[1], hz=params[j]['hz'], R0=R0, theta_deg=theta_deg)
+
+        p0_walkers = np.random.rand(nwalkers,ndim)
+        p0_walkers *= 1-np.sin(np.deg2rad(theta_deg))
+        p0_walkers += np.sin(np.deg2rad(theta_deg))
+
+        with Pool(ncores) as pool:
+            sampler = emcee.EnsembleSampler(nwalkers, ndim, loglike, pool=pool)
+            for pos,lnp,rstate in tqdm.tqdm(sampler.sample(p0_walkers, iterations=nstep), total=nstep):
+                pass
+
+        burnt_samples[j]['x'] = np.reshape(sampler.chain[:, int(nstep/2):, :][:,::3,:], (-1,ndim)).copy().T
+
+    for j in range(3):
+        #ncmpt = int(nsample * params[j]['w'])
+
+        cmpt_sample = np.random.choice(np.arange(burnt_samples[j]['x'].shape[1]), j_nsample[j], replace=False)
+
+        selected_samples[j]['s'] = burnt_samples[j]['x'][:,cmpt_sample][0]
+        selected_samples[j]['sinb'] = burnt_samples[j]['x'][:,cmpt_sample][1]
+        selected_samples[j]['l'] = np.random.rand(len(cmpt_sample))*2*np.pi
+
+    for key in ['s', 'sinb', 'l', 'M']:
+        selected_samples[key] = np.hstack([selected_samples[j][key] for j in range(3)])
+    selected_samples['cmpt'] = np.hstack([np.zeros(len(selected_samples[j][key])).astype(int) + j for j in range(3)])
+
+
+    #%% Save data in HDF5 format
+    filename = '/data/asfe2/Projects/mwtrace_data/mockmodel/sample.h'
+    print('Saving...' + filename)
+    with h5py.File(filename, 'w') as hf:
+            for k in global_params.keys():
+                hf.create_dataset('params/'+k, data=global_params[k])
+            for j in range(3):
+                for k in params[j].keys():
+                    hf.create_dataset('params/'+str(j)+'/'+k, data=params[j][k])
+            for k in ['s', 'sinb', 'l', 'M', 'cmpt']:
+                print(k, len(selected_samples[k]))
+                hf.create_dataset(k, data=selected_samples[k])
