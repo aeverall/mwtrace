@@ -40,6 +40,38 @@ def plot_corner(sampler, functions=None, nburnt=None, clean_chains=np.inf, **kwa
                 pass
     _=corner.corner(flatchain, **kwargs)
 
+def plot_chains(sampler, truths=None, labels=None, functions=None, clean_chains=np.inf, lnprob=None, plot_bad=True):
+
+    if type(sampler) is np.ndarray:
+        chains=sampler.copy()
+        if lnprob is not None: good_chains = lnprob[:,-1]>np.max(lnprob)-clean_chains
+        else: good_chains = np.ones(chains.shape[0]).astype(bool)
+    else:
+        chains=sampler.chain.copy()
+        good_chains = sampler.lnprobability[:,-1].copy()>np.max(sampler.lnprobability)-clean_chains
+    if truths is not None: true_pars = truths.copy()
+
+    nwalkers, niter, ndim = chains.shape
+    if functions is not None:
+        for j in range(len(functions)):
+            if functions[j] is not None:
+                chains[:,:,j]=functions[j](chains[:,:,j])
+                if truths is not None:
+                    true_pars[j]=functions[j](true_pars[j])
+    fig, axes = plt.subplots(ndim,1,figsize=(10,ndim*5), sharex=True)
+    for idim in range(ndim):
+        if ndim>1:plt.sca(axes[idim])
+        for iw in range(nwalkers):
+            if good_chains[iw]: plt.plot(chains[iw,:,idim], c='k', alpha=0.5)
+            else:
+                if plot_bad: plt.plot(chains[iw,:,idim], c='r', alpha=0.5)
+                else: pass
+        if truths is not None:
+            plt.plot([0, chains.shape[1]], [true_pars[idim],true_pars[idim]], '--r', linewidth=3)
+        if labels is not None: plt.ylabel(labels[idim])
+
+
+    plt.subplots_adjust(hspace=0.01)
 
 def layered_corners(samplers, labels=None, index=None, savefolder=None, savefile=None,
                 functions=None, truths=None, fig=None, ax=None,

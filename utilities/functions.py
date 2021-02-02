@@ -68,6 +68,10 @@ def d2logIJ_dp2(p, beta, pi_mu, pi_err, n, transform='none', b=None):
 def integrate_gh(integrand, jacobian, inverse_transform, root_z, sigma, args, kwargs,
                  degree=10):
 
+    """
+    Gauss-Hermite integral
+    """
+
     if (kwargs['transform']=='logit')|(kwargs['transform']=='log_b'):
         if np.isscalar(kwargs['b']): b = kwargs['b']
         else: b = kwargs['b'][:,np.newaxis]
@@ -118,19 +122,18 @@ def d2logIJ_dp2_plbrk(p, beta, pi_mu, pi_err, n, transform='none', b=None):
 
 @njit
 def bisect_algo(foo, a, b, tol=1e-10, args=None):
-
     x0,x2 = (a,b)
-    fx0 = foo(x0, *args)
-    fx2 = foo(x2, *args)
+    fx0 = foo(x0, args)
+    fx2 = foo(x2, args)
     x1 = (x0+x2)/2
-    fx1 = foo(x1, *args)
+    fx1 = foo(x1, args)
 
     px0,px1,px2=(x0,x1,x2)
 
     while abs(fx1)>tol:
 
         x1 = (x0+x2)/2
-        fx1 = foo(x1, *args)
+        fx1 = foo(x1, args)
 
         if fx1*fx0 < 0:
             x2=x1
@@ -218,7 +221,7 @@ def get_fooroots_ridder_hm(func, b=None, a=None, args=None):
         args_i = tuple([arg[i] for arg in args])
         if a is None:
             if False: roots[i] = ridders_algo(func, 0., b[i], args=args_i)
-            if True: roots[i] = bisect_algo(func, 0., b[i], args=args_i)
+            if True: roots[i]=bisect_algo(func, 0., b[i], args=args_i)
         else:
             if False: roots[i] = ridders_algo(func, b[i], a[i], args=args_i)
             if True: roots[i]=bisect_algo(func, b[i], a[i], args=args_i)

@@ -1,3 +1,10 @@
+"""
+Generate sample from three component disk model:
+-Exponential disk
+-Exponential disk
+-Power law halo
+"""
+
 import sys, os, pickle
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -66,17 +73,11 @@ if __name__=='__main__':
     nstep=int(nsample/30 * 2 * 5)
     print('Nsample: ', nsample)
 
-    alpha1=-0.15; alpha2=-0.3
-    Mms=8.; Mms1=9.; Mms2=7.; Mx=10.7
-    R0=8.27; theta_deg=60
-    global_params = {'alpha1':alpha1, 'alpha2':alpha2,
-                        'Mms':Mms, 'Mms1':Mms1, 'Mms2':Mms2, 'Mx':Mx,
-                        'R0':R0, 'theta_deg':theta_deg}
-
-    params = {0: {'hz':0.9, 'alpha3':-1.,  'Mto':4.8, 'fD':0.94, 'w':0.2},
-              1: {'hz':1.9, 'alpha3':-0.5, 'Mto':3.14, 'fD':0.998, 'w':0.3},
-              2: {'hz':4.6, 'alpha3':-0.6,  'Mto':3.3, 'fD':0.995,  'w':0.5}}
-
+    # Parameters for all three components of the model.
+    global_params = {'alpha1':-0.15, 'alpha2':-0.3,
+                    'Mms':8., 'Mms1':9., 'Mms2':7., 'Mx':10.7,
+                    'R0':8.27, 'theta_deg':60}
+    # Individual independent component parameters.
     params = {0: {'hz':0.9, 'alpha3':-0.1,  'Mto':9.5, 'fD':0., 'w':0.2},
               1: {'hz':1.9, 'alpha3':-0.3, 'Mto':10.7, 'fD':0., 'w':0.3},
               2: {'hz':4.6, 'alpha3':-0.1,  'Mto':10.0, 'fD':0.,  'w':0.5}}
@@ -89,7 +90,6 @@ if __name__=='__main__':
     fdwarf = np.array([params[j]['fD'] for j in range(3)])
     j_ndwarf = np.round(j_nsample * fdwarf).astype(int)
     j_ngiant = j_nsample - np.round(j_nsample * fdwarf).astype(int)
-
 
 
     #%% Magnitude distribution sampling
@@ -137,8 +137,6 @@ if __name__=='__main__':
         burnt_samples[j]['x'] = np.reshape(sampler.chain[:, int(nstep/2):, :][:,::3,:], (-1,ndim)).copy().T
 
     for j in range(3):
-        #ncmpt = int(nsample * params[j]['w'])
-
         cmpt_sample = np.random.choice(np.arange(burnt_samples[j]['x'].shape[1]), j_nsample[j], replace=False)
 
         selected_samples[j]['s'] = burnt_samples[j]['x'][:,cmpt_sample][0]
@@ -151,7 +149,7 @@ if __name__=='__main__':
 
 
     #%% Save data in HDF5 format
-    filename = '/data/asfe2/Projects/mwtrace_data/mockmodel/sample.h'
+    filename = '/data/asfe2/Projects/mwtrace_data/mockmodel_data/sample.h'
     print('Saving...' + filename)
     with h5py.File(filename, 'w') as hf:
             for k in global_params.keys():

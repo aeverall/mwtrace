@@ -124,7 +124,7 @@ def logmodel_perr_ridder(sample, params, gmm=None, fid_pars=None, get_coeffs=Fal
                                               functions.jac,
                                               functions.trans_i,
                                               root_z, 1/np.sqrt(-curve), args, kwargs))
-    #print(root/pi_max, curve)
+    #print(curve, root, root_z)
 
     return logN + log_mnorm + log_pnorm + log_m + log_p
 
