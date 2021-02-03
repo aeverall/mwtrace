@@ -2,7 +2,7 @@ import sys, os
 import numpy as np
 import emcee, tqdm, corner
 from multiprocessing import Pool
-
+from copy import deepcopy as copy
 
 #%% Likelihood functions
 def poisson_like(params, sample=None, param_bounds=(-np.inf, np.inf), integration='scipy',
@@ -53,7 +53,27 @@ def run_mcmc(p0, poisson_kwargs, nstep=1000, ncores=1):
 
     return sampler
 
+def run_mcmc_global(p0, poisson_like, bounds, nstep=1000, ncores=1, notebook=False, initialise=True):
+    """
+    run_mcmc_global: emcee with poisson_kwargs defined globally.
+    Data is not passed back and forth but is always called as a global argument.
+    Leads to large performance increase for big datasets
+    """
 
+    if notebook: tqdm_foo = tqdm.tqdm_notebook
+    else: tqdm_foo = tqdm.tqdm
+
+    ndim=p0.shape[0]
+
+    if initialise: nwalkers=ndim*4; p0_walkers = np.random.normal(p0, np.abs(bounds[1]-bounds[0]).astype(float)/100000, size=(nwalkers,ndim))
+    else: nwalkers=p0.shape[1]; p0_walkers = p0.copy().T
+
+    with Pool(ncores) as pool:
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, poisson_like, pool=pool)
+        for pos,lnp,rstate in tqdm_foo(sampler.sample(p0_walkers, iterations=nstep), total=nstep):
+            pass
+
+    return sampler
 
 
 

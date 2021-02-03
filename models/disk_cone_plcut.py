@@ -44,49 +44,7 @@ def logmodel(sample, params, gmm=None, fid_pars=None):
 
     return logN + log_mnorm + log_m + log_pnorm + log_p
 
-def logmodel_perr(sample, params, gmm=None, fid_pars=None):
-
-    # Observables
-    pi_mu, lat, m_mu, pi_err = sample
-
-    # Parameters
-    logN = params[0]
-    hz = 1/np.exp(params[1])
-    alpha = params[2]
-    Mmax = fid_pars['Mbol_max_true']
-    theta= fid_pars['lat_min']
-
-    # Latent variables
-    n = -4 + alpha
-    k = alpha*np.log(10)/5
-    beta = np.exp(params[1])*np.abs(np.sin(lat))
-    # Max parallax due to minimum abs mag
-    pi_max = 10**((Mmax+10-m_mu)/5)
-
-    # Normalisation of distributions
-    log_mnorm = np.log(k) - k*(Mmax+10)
-    log_pnorm = 2*np.log(np.tan(theta)) - 3*np.log(hz) - 0.5*np.log(2*np.pi*pi_err**2)
-
-    # Magnitude contribution
-    log_m = k*m_mu
-    # Parallax contribution
-    kwargs = {'transform':'logit', 'b':pi_max}
-    coeffs = np.array([np.zeros(len(pi_mu))+1., - (pi_max+pi_mu), (pi_max*pi_mu-(n+2)*pi_err**2),
-                       (pi_max*(n+1)-beta)*pi_err**2, pi_max*beta*pi_err**2]).T + 0.j
-    root, ngood = functions.get_roots(coeffs, pi_max)
-    root_z = functions.trans(root, **kwargs)
-    if np.sum(ngood>1)>0:
-        print(np.unique(ngood), np.sum(ngood>1))
-    args = (beta, pi_mu, pi_err, n)
-    curve = functions.d2logIJ_dp2(root, *args, **kwargs)/functions.jac(root, **kwargs)**2
-    log_p = np.log(functions.integrate_gh(integrand,
-                                              functions.jac,
-                                              functions.trans_i,
-                                              root_z, 1/np.sqrt(-curve), args, kwargs))
-
-    return logN + log_mnorm + log_pnorm + log_m + log_p
-
-def logmodel_perr_ridder(sample, params, gmm=None, fid_pars=None, get_coeffs=False):
+def logmodel_perr(sample, params, gmm=None, fid_pars=None, get_coeffs=False):
 
     # Observables
     pi_mu, lat, m_mu, pi_err = sample
@@ -115,7 +73,10 @@ def logmodel_perr_ridder(sample, params, gmm=None, fid_pars=None, get_coeffs=Fal
     kwargs = {'transform':'logit', 'b':pi_max}
     coeffs = np.array([np.zeros(len(pi_mu))+1., - (pi_max+pi_mu), (pi_max*pi_mu-(n+2)*pi_err**2),
                        (pi_max*(n+1)-beta)*pi_err**2, pi_max*beta*pi_err**2]).T
-    root = functions.get_roots_ridder_hm(coeffs, b=pi_max)
+
+    # Gauss-Hermite integration
+    root = np.zeros(coeffs.shape[0])
+    root = functions.get_polyroots(coeffs, root, b=pi_max)
     root_z = functions.trans(root, **kwargs)
     args = (beta, pi_mu, pi_err, n)
     if get_coeffs: return root, coeffs, kwargs, args
@@ -124,53 +85,11 @@ def logmodel_perr_ridder(sample, params, gmm=None, fid_pars=None, get_coeffs=Fal
                                               functions.jac,
                                               functions.trans_i,
                                               root_z, 1/np.sqrt(-curve), args, kwargs))
-    #print(curve, root, root_z)
 
     return logN + log_mnorm + log_pnorm + log_m + log_p
 
-def logmodel_perr_merr(sample, params, gmm=None, fid_pars=None):
 
-    # Observables
-    pi_mu, lat, m_mu, pi_err, m_err = sample
-
-    # Parameters
-    logN = params[0]
-    hz = 1/np.exp(params[1])
-    alpha = params[2]
-    Mmax = fid_pars['Mbol_max_true']
-    theta= fid_pars['lat_min']
-
-    # Latent variables
-    n = -4 + alpha
-    k = alpha*np.log(10)/5
-    beta = np.exp(params[1])*np.abs(np.sin(lat))
-    # Max parallax due to minimum abs mag
-    pi_max = 10**((Mmax+10-(m_mu+k*m_err**2))/5)
-
-    # Normalisation of distributions
-    log_mnorm = np.log(k) - k*(Mmax+10)
-    log_pnorm = 2*np.log(np.tan(theta)) - 3*np.log(hz) - 0.5*np.log(2*np.pi*pi_err**2)
-
-    # Magnitude contribution
-    log_m = k*m_mu + (k**2*m_err**2)/2
-    # Parallax contribution
-    kwargs = {'transform':'logit', 'b':pi_max}
-    coeffs = np.array([np.zeros(len(pi_mu))+1., - (pi_max+pi_mu), (pi_max*pi_mu-(n+2)*pi_err**2),
-                       (pi_max*(n+1)-beta)*pi_err**2, pi_max*beta*pi_err**2]).T + 0.j
-    root, ngood = functions.get_roots(coeffs, pi_max)
-    root_z = functions.trans(root, **kwargs)
-    if np.sum(ngood>1)>0:
-        print(np.unique(ngood), np.sum(ngood>1))
-    args = (beta, pi_mu, pi_err, n)
-    curve = functions.d2logIJ_dp2(root, *args, **kwargs)/functions.jac(root, **kwargs)**2
-    log_p = np.log(functions.integrate_gh(integrand,
-                                              functions.jac,
-                                              functions.trans_i,
-                                              root_z, 1/np.sqrt(-curve), args, kwargs))
-
-    return logN + log_mnorm + log_pnorm + log_m + log_p
-
-def logmodel_perr_merr_ridder(sample, params, gmm=None, fid_pars=None, get_coeffs=False):
+def logmodel_perr_merr(sample, params, gmm=None, fid_pars=None, get_coeffs=False):
 
     # Observables
     pi_mu, lat, m_mu, pi_err, m_err = sample
@@ -211,7 +130,7 @@ def logmodel_perr_merr_ridder(sample, params, gmm=None, fid_pars=None, get_coeff
 
     return logN + log_mnorm + log_pnorm + log_m + log_p
 
-def logmodel_perr_merr_ridder_GH(sample, params, gmm=None, fid_pars=None):
+def logmodel_perr_merr_GH(sample, params, gmm=None, fid_pars=None):
 
     # Observables
     pi_mu, lat, m_mu, pi_err, m_err = sample
@@ -294,6 +213,90 @@ def integral_model_SF(params, bins=None, fid_pars=None):
     #print(I)
 
     return N * I
+
+def logmodel_perr_nproots(sample, params, gmm=None, fid_pars=None):
+
+    # Observables
+    pi_mu, lat, m_mu, pi_err = sample
+
+    # Parameters
+    logN = params[0]
+    hz = 1/np.exp(params[1])
+    alpha = params[2]
+    Mmax = fid_pars['Mbol_max_true']
+    theta= fid_pars['lat_min']
+
+    # Latent variables
+    n = -4 + alpha
+    k = alpha*np.log(10)/5
+    beta = np.exp(params[1])*np.abs(np.sin(lat))
+    # Max parallax due to minimum abs mag
+    pi_max = 10**((Mmax+10-m_mu)/5)
+
+    # Normalisation of distributions
+    log_mnorm = np.log(k) - k*(Mmax+10)
+    log_pnorm = 2*np.log(np.tan(theta)) - 3*np.log(hz) - 0.5*np.log(2*np.pi*pi_err**2)
+
+    # Magnitude contribution
+    log_m = k*m_mu
+    # Parallax contribution
+    kwargs = {'transform':'logit', 'b':pi_max}
+    coeffs = np.array([np.zeros(len(pi_mu))+1., - (pi_max+pi_mu), (pi_max*pi_mu-(n+2)*pi_err**2),
+                       (pi_max*(n+1)-beta)*pi_err**2, pi_max*beta*pi_err**2]).T + 0.j
+    root, ngood = functions.get_roots(coeffs, pi_max)
+    root_z = functions.trans(root, **kwargs)
+    if np.sum(ngood>1)>0:
+        print(np.unique(ngood), np.sum(ngood>1))
+    args = (beta, pi_mu, pi_err, n)
+    curve = functions.d2logIJ_dp2(root, *args, **kwargs)/functions.jac(root, **kwargs)**2
+    log_p = np.log(functions.integrate_gh(integrand,
+                                              functions.jac,
+                                              functions.trans_i,
+                                              root_z, 1/np.sqrt(-curve), args, kwargs))
+
+    return logN + log_mnorm + log_pnorm + log_m + log_p
+
+def logmodel_perr_merr_nproots(sample, params, gmm=None, fid_pars=None):
+
+    # Observables
+    pi_mu, lat, m_mu, pi_err, m_err = sample
+
+    # Parameters
+    logN = params[0]
+    hz = 1/np.exp(params[1])
+    alpha = params[2]
+    Mmax = fid_pars['Mbol_max_true']
+    theta= fid_pars['lat_min']
+
+    # Latent variables
+    n = -4 + alpha
+    k = alpha*np.log(10)/5
+    beta = np.exp(params[1])*np.abs(np.sin(lat))
+    # Max parallax due to minimum abs mag
+    pi_max = 10**((Mmax+10-(m_mu+k*m_err**2))/5)
+
+    # Normalisation of distributions
+    log_mnorm = np.log(k) - k*(Mmax+10)
+    log_pnorm = 2*np.log(np.tan(theta)) - 3*np.log(hz) - 0.5*np.log(2*np.pi*pi_err**2)
+
+    # Magnitude contribution
+    log_m = k*m_mu + (k**2*m_err**2)/2
+    # Parallax contribution
+    kwargs = {'transform':'logit', 'b':pi_max}
+    coeffs = np.array([np.zeros(len(pi_mu))+1., - (pi_max+pi_mu), (pi_max*pi_mu-(n+2)*pi_err**2),
+                       (pi_max*(n+1)-beta)*pi_err**2, pi_max*beta*pi_err**2]).T + 0.j
+    root, ngood = functions.get_roots(coeffs, pi_max)
+    root_z = functions.trans(root, **kwargs)
+    if np.sum(ngood>1)>0:
+        print(np.unique(ngood), np.sum(ngood>1))
+    args = (beta, pi_mu, pi_err, n)
+    curve = functions.d2logIJ_dp2(root, *args, **kwargs)/functions.jac(root, **kwargs)**2
+    log_p = np.log(functions.integrate_gh(integrand,
+                                              functions.jac,
+                                              functions.trans_i,
+                                              root_z, 1/np.sqrt(-curve), args, kwargs))
+
+    return logN + log_mnorm + log_pnorm + log_m + log_p
 
 
 # Plotting modules

@@ -75,7 +75,8 @@ def plot_chains(sampler, truths=None, labels=None, functions=None, clean_chains=
 
 def layered_corners(samplers, labels=None, index=None, savefolder=None, savefile=None,
                 functions=None, truths=None, fig=None, ax=None,
-                colors=plt.rcParams['axes.prop_cycle'].by_key()['color']):#, rng=None):
+                colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
+                linestyles=['-']*10, pad=0.1):#, rng=None):
 
     if type(samplers[0])==np.ndarray: chains=[sampler.copy() for sampler in samplers]
     else: chains=[sampler.chain.copy() for sampler in samplers]
@@ -103,6 +104,9 @@ def layered_corners(samplers, labels=None, index=None, savefolder=None, savefile
             max_chain = np.max(flatchain, axis=0)
             rng = np.vstack((np.min(np.vstack((rng[:,0], min_chain)), axis=0),
                              np.max(np.vstack((rng[:,1], max_chain)), axis=0))).T
+    diff = rng[:,1]-rng[:,0]
+    rng[:,1] += diff*pad
+    rng[:,0] -= diff*pad
 
     if truths is not None:
         truths_f = truths.copy()
@@ -121,7 +125,7 @@ def layered_corners(samplers, labels=None, index=None, savefolder=None, savefile
             if functions[j] is not None:
                 flatchain[:,j]=functions[j](flatchain[:,j])
 
-        corner_new(flatchain, fig=fig, range=rng, color=colors[i], truths=truths_f,
+        corner_new(flatchain, fig=fig, range=rng, color=colors[i], linestyle=linestyles[i], truths=truths_f,
                             labels=labels, index=index[i], **corner_kwargs);
 
         plt.sca(ax[0,0])
@@ -134,7 +138,7 @@ def layered_corners(samplers, labels=None, index=None, savefolder=None, savefile
 
 
 
-def corner_new(xs, bins=20, range=None, weights=None, color="k",
+def corner_new(xs, bins=20, range=None, weights=None, color="k", linestyle='-',
            smooth=None, smooth1d=None,
            labels=None, label_kwargs=None, index=None,
            show_titles=False, title_fmt=".2f", title_kwargs=None,
@@ -249,7 +253,7 @@ def corner_new(xs, bins=20, range=None, weights=None, color="k",
         # Plot the histograms.
         if smooth1d is None:
             n, _, _ = ax.hist(x, bins=bins[i], weights=weights, density=True,
-                              range=np.sort(range[i]), label=index, **hist_kwargs)
+                              range=np.sort(range[i]), label=index, linestyle=linestyle, **hist_kwargs)
         else:
             if gaussian_filter is None:
                 raise ImportError("Please install scipy for smoothing")
@@ -258,7 +262,7 @@ def corner_new(xs, bins=20, range=None, weights=None, color="k",
             n = gaussian_filter(n, smooth1d)
             x0 = np.array(list(zip(b[:-1], b[1:]))).flatten()
             y0 = np.array(list(zip(n, n))).flatten()
-            ax.plot(x0, y0, **hist_kwargs)
+            ax.plot(x0, y0, linestyle=linestyle, **hist_kwargs)
 
         if truths is not None and truths[i] is not None:
             ax.axvline(truths[i], color=truth_color)
@@ -334,7 +338,7 @@ def corner_new(xs, bins=20, range=None, weights=None, color="k",
                 y = y.compressed()
 
             hist2d(y, x, ax=ax, range=[range[j], range[i]], weights=weights,
-                   color=color, smooth=smooth, bins=[bins[j], bins[i]],
+                   color=color, linestyle=linestyle, smooth=smooth, bins=[bins[j], bins[i]],
                    **hist2d_kwargs)
 
             if truths is not None:
@@ -376,7 +380,7 @@ def corner_new(xs, bins=20, range=None, weights=None, color="k",
 
 
 def hist2d(x, y, bins=20, range=None, weights=None, levels=None, smooth=None,
-           ax=None, color=None, plot_datapoints=True, plot_density=True,
+           ax=None, color=None, linestyle='-', plot_datapoints=True, plot_density=True,
            plot_contours=True, no_fill_contours=False, fill_contours=False,
            contour_kwargs=None, contourf_kwargs=None, data_kwargs=None,
            **kwargs):
@@ -449,7 +453,7 @@ def hist2d(x, y, bins=20, range=None, weights=None, levels=None, smooth=None,
     # This is the color map for the density plot, over-plotted to indicate the
     # density of the points near the center.
     density_cmap = LinearSegmentedColormap.from_list(
-        "density_cmap", [color, (1, 1, 1, 0)])
+        "density_cmap", [color[:3]+(color[3]*0.5,), (1, 1, 1, 0)])
 
     # This color map is used to hide the points at the high density areas.
     white_cmap = LinearSegmentedColormap.from_list(
@@ -458,9 +462,10 @@ def hist2d(x, y, bins=20, range=None, weights=None, levels=None, smooth=None,
     # This "color map" is the list of colors for the contour levels if the
     # contours are filled.
     rgba_color = colorConverter.to_rgba(color)
-    contour_cmap = [list(rgba_color) for l in levels] + [rgba_color]
+    contour_cmap = [list(rgba_color) for l in levels] + [list(rgba_color)]
     for i, l in enumerate(levels):
-        contour_cmap[i][-1] *= float(i) / (len(levels)+1)
+        contour_cmap[i][-1] *= 0.5 * float(i) / (len(levels)+1)
+    contour_cmap[i+1][-1] *= 0.5
 
     # We'll make the 2D histogram to directly estimate the density.
     try:
@@ -556,7 +561,7 @@ def hist2d(x, y, bins=20, range=None, weights=None, levels=None, smooth=None,
         if contour_kwargs is None:
             contour_kwargs = dict()
         contour_kwargs["colors"] = [contour_kwargs.get("colors", color)]
-        ax.contour(X2, Y2, H2.T, V, **contour_kwargs)
+        ax.contour(X2, Y2, H2.T, V, linestyles=linestyle, **contour_kwargs)
 
     ax.set_xlim(range[0])
     ax.set_ylim(range[1])

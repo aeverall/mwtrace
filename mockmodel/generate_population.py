@@ -15,10 +15,6 @@ import numpy as np, h5py, scipy, scipy.stats, emcee, tqdm
 from multiprocessing import Pool
 from copy import deepcopy as copy
 
-sys.path.append('../utilities/')
-import distributions
-import samplers
-
 
 def dwarf_magnitude(M, alpha1=-0.5, alpha2=-1.,
                  Mto=4., Mms=8., Mms1=9., Mms2=7., Mx=10.):
@@ -76,7 +72,7 @@ if __name__=='__main__':
     # Parameters for all three components of the model.
     global_params = {'alpha1':-0.15, 'alpha2':-0.3,
                     'Mms':8., 'Mms1':9., 'Mms2':7., 'Mx':10.7,
-                    'R0':8.27, 'theta_deg':60}
+                    'R0':8.27, 'theta_deg':60, 'N':nsample}
     # Individual independent component parameters.
     params = {0: {'hz':0.9, 'alpha3':-0.1,  'Mto':9.5, 'fD':0., 'w':0.2},
               1: {'hz':1.9, 'alpha3':-0.3, 'Mto':10.7, 'fD':0., 'w':0.3},
@@ -123,11 +119,11 @@ if __name__=='__main__':
     for j in range(3):
         print('Spatial %d' % j)
         def loglike(x):
-            return functions[j](x[0], x[1], hz=params[j]['hz'], R0=R0, theta_deg=theta_deg)
+            return functions[j](x[0], x[1], hz=params[j]['hz'], R0=global_params['R0'], theta_deg=global_params['theta_deg'])
 
         p0_walkers = np.random.rand(nwalkers,ndim)
-        p0_walkers *= 1-np.sin(np.deg2rad(theta_deg))
-        p0_walkers += np.sin(np.deg2rad(theta_deg))
+        p0_walkers *= 1-np.sin(np.deg2rad(global_params['theta_deg']))
+        p0_walkers += np.sin(np.deg2rad(global_params['theta_deg']))
 
         with Pool(ncores) as pool:
             sampler = emcee.EnsembleSampler(nwalkers, ndim, loglike, pool=pool)
@@ -148,15 +144,30 @@ if __name__=='__main__':
     selected_samples['cmpt'] = np.hstack([np.zeros(len(selected_samples[j][key])).astype(int) + j for j in range(3)])
 
 
+    # Apparent Magnitude
+    selected_samples['m'] = selected_samples['M'] + 5*np.log10(100*selected_samples['s'])
+
+    # Observables - draws from error distribution
+    # Observed parallax
+    selected_samples['parallax_error'] = scipy.stats.gamma.rvs(1., size=global_params['N'])/2.
+    selected_samples['parallax'] = 1/selected_samples['s']
+    selected_samples['parallax_obs'] = np.random.normal(selected_samples['parallax'], selected_samples['parallax_error'])
+
+    # Observed apparent magnitude
+    selected_samples['m_err'] = scipy.stats.gamma.rvs(1.5, size=global_params['N'])/3.
+    selected_samples['m_obs'] = np.random.normal(selected_samples['m'], selected_samples['m_err'])
+
+
     #%% Save data in HDF5 format
-    filename = '/data/asfe2/Projects/mwtrace_data/mockmodel_data/sample.h'
+    filename = '/data/asfe2/Projects/mwtrace_data/mockmodel/sample.h'
     print('Saving...' + filename)
     with h5py.File(filename, 'w') as hf:
             for k in global_params.keys():
-                hf.create_dataset('params/'+k, data=global_params[k])
+                hf.create_dataset('true_pars/'+k, data=global_params[k])
             for j in range(3):
                 for k in params[j].keys():
-                    hf.create_dataset('params/'+str(j)+'/'+k, data=params[j][k])
-            for k in ['s', 'sinb', 'l', 'M', 'cmpt']:
+                    hf.create_dataset('true_pars/'+str(j)+'/'+k, data=params[j][k])
+            for k in ['s', 'sinb', 'l', 'M', 'cmpt',
+                      'm','parallax_error', 'parallax_obs','m_err','m_obs']:
                 print(k, len(selected_samples[k]))
-                hf.create_dataset(k, data=selected_samples[k])
+                hf.create_dataset('sample/'+k, data=selected_samples[k])

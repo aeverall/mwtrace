@@ -150,7 +150,7 @@ def bisect_algo(foo, a, b, tol=1e-10, args=None):
 
     return x1
 
-@njit
+#@njit
 def ridders_algo(foo, a, b, tol=1e-5, args=None):
 
     x0,x2 = (a,b)
@@ -202,6 +202,29 @@ def ridders_algo(foo, a, b, tol=1e-5, args=None):
     return x3
 
 @njit
+def get_polyroots(coeffs, roots, b=None):
+
+    for i in range(coeffs.shape[0]):
+        if False: roots[i] = ridders_algo(polynomial_jit, 0., b[i], args=(coeffs[i,:]))
+        if True: roots[i] = bisect_algo(polynomial_jit, 0., b[i], args=(coeffs[i,:]))
+
+    return roots
+
+@njit
+def get_fooroots(func, roots, a=None, b=None, args=None):
+
+    for i in range(len(args[0])):
+        args_i = [arg[i] for arg in args]
+        if a is None:
+            if False: roots[i] = ridders_algo(func, 0., b[i], args=args_i)
+            if True: roots[i]  = bisect_algo(func, 0., b[i], args=args_i)
+        else:
+            if False: roots[i] = ridders_algo(func, b[i], a[i], args=args_i)
+            if True: roots[i]  = bisect_algo(func, b[i], a[i], args=args_i)
+
+    return roots
+
+@njit
 def get_roots_ridder_hm(coeffs, b=None):
     # hm stands for homemade
     roots = np.zeros(coeffs.shape[0]) + np.nan
@@ -218,13 +241,13 @@ def get_fooroots_ridder_hm(func, b=None, a=None, args=None):
     # hm stands for homemade
     roots = np.zeros(len(args[0])) + np.nan
     for i in range(len(args[0])):
-        args_i = tuple([arg[i] for arg in args])
+        args_i = [arg[i] for arg in args]
         if a is None:
             if False: roots[i] = ridders_algo(func, 0., b[i], args=args_i)
             if True: roots[i]=bisect_algo(func, 0., b[i], args=args_i)
         else:
-            if False: roots[i] = ridders_algo(func, b[i], a[i], args=args_i)
-            if True: roots[i]=bisect_algo(func, b[i], a[i], args=args_i)
+            if False: roots[i] = ridders_algo(func, a[i], b[i], args=args_i)
+            if True: roots[i]=bisect_algo(func, a[i], b[i], args=args_i)
 
     return roots
 
