@@ -474,6 +474,7 @@ def expmodel_perr_d2logIJ_dp2(p, beta, n, mu, err, transform='none', b=None, a=N
 def log_halomodel_perr(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
                                 Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, degree=21):
 
+
     ep1=1.3; ep2=2.3;
     a1=-np.log(10)*(ep1-1)/(2.5*alpha1); a2=-np.log(10)*(ep2-1)/(2.5*alpha2);
 
@@ -486,13 +487,12 @@ def log_halomodel_perr(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alph
     n2 = -(4 + alpha2*5/np.log(10))
     n3 = -(4 + alpha3*5/np.log(10))
 
-    log_Ams = np.log( fD*a1*a2 ) - \
-              scipy.special.logsumexp(np.array([alpha1*(Mms-Mms1), alpha1*(Mms-Mx),
-                                                alpha1*(Mms-Mms1)+alphag*(Mms1-Mms2), alpha1*(Mms-Mms1),
-                                                alpha2*(Mms-Mto), alpha2*(Mms-Mms2)]),
-                                    b=np.array([a2/alpha1, -a2/alpha1,
-                                                a2/alphag, -a2/alphag,
-                                                a1/alpha2, -a1/alpha2]))
+    exponent = np.array([alpha1*(Mms-Mms1), alpha1*(Mms-Mx),
+                        alpha1*(Mms-Mms1)+alphag*(Mms1-Mms2), alpha1*(Mms-Mms1),
+                        alpha2*(Mms-Mto), alpha2*(Mms-Mms2)])
+    b = np.array([a2/alpha1, -a2/alpha1, a2/alphag, -a2/alphag, a1/alpha2, -a1/alpha2])
+    log_Ams = np.log( fD*a1*a2 ) - scipy.special.logsumexp(exponent,b=b)
+
     log_AG = np.log(-alpha3) + np.log(1-fD)
 
     beta = abs_sin_lat/R0
@@ -519,15 +519,15 @@ def log_halomodel_perr(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alph
         grad_min = halomodel_perr_grad(p_min, *args)
         grad_max = halomodel_perr_grad(p_max, *args)
         legendre = grad_min*grad_max>0
+        legendre[:]=False
 
         # Gauss - Legendre Quadrature
-        a = p_min[legendre][:,np.newaxis]; b = p_max[legendre][:,np.newaxis]
-        args = (beta[legendre,np.newaxis], n*np.ones(len(pi_mu))[legendre,np.newaxis],
-                    hz*np.ones(len(pi_mu))[legendre,np.newaxis], pi_mu[legendre, np.newaxis], pi_err[legendre,np.newaxis])
+        a = p_min[legendre]; b = p_max[legendre]
+        args = (beta[legendre], n*np.ones(len(pi_mu))[legendre],
+                    hz*np.ones(len(pi_mu))[legendre], pi_mu[legendre], pi_err[legendre])
         leg_nodes, leg_weights = np.polynomial.legendre.leggauss(degree)
-        leg_nodes = leg_nodes[np.newaxis,:] * (b-a)/2 + (b+a)/2
-        p_integral[legendre] = np.sum(halomodel_perr_integrand(leg_nodes, *args), axis=1)
-
+        leg_nodes = leg_nodes[np.newaxis,:].T * (b-a)/2 + (b+a)/2
+        p_integral[legendre] = np.sum(halomodel_perr_integrand(leg_nodes, *args), axis=0)
 
         # Gauss - Hermite Quadrature
         a = p_min[~legendre]; b = p_max[~legendre]
@@ -549,21 +549,16 @@ def log_halomodel_perr(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alph
 
 @njit
 def halomodel_perr_grad(p, beta, n, h, mu, err):
-    #beta, n, h, mu, err = args
     return -p**4 + mu*p**3 - (beta**2-n*err**2)*p**2 + mu*beta**2*p + (n+h)*err**2*beta**2
 @njit
 def halomodel_perr_logit_grad(p, args):
     beta, n, h, mu, err, pmax = args
-    #return (n+1)/p - 1/(pmax-p) + h*beta**2 / p / (beta**2 + p**2)
-    # return -((n+2)*err**2)*p**3 + ((n+1)*pmax*err**2)*p**2 \
-    #        - ((n+2+h)*beta**2*err**2)*p + ((h+n+1)*pmax)*beta**2*err**2
     return p**5 - (pmax+mu)*p**4 \
            + ((beta**2+mu*pmax) - (n+2)*err**2)*p**3 \
            + ((n+1)*pmax*err**2 - beta**2*(mu+pmax))*p**2 \
            + (mu*beta**2*pmax - (n+2+h)*beta**2*err**2)*p + ((h+n+1)*pmax)*beta**2*err**2
 @njit
 def halomodel_perr_integrand(p, beta, n, h, mu, err):
-    #return p**n * (beta**2/p**2 + 1)**(-h/2) #* np.exp(-(p-mu)**2/(2*err**2))
     return p**n * (beta**2/p**2 + 1)**(-h/2) * np.exp(-(p-mu)**2/(2*err**2))
 
 @njit
@@ -661,6 +656,7 @@ class TestPoissonBinomial(unittest.TestCase):
     def test_halo_logit_grad_perr(self):
 
         test_args = (1,3,2.,0.5,0.1,1.)
+        beta, n, h, mu, err, pmax = test_args
         grad = lambda x: dh_msto.halomodel_perr_logit_grad(x, test_args) \
                        * dh_msto.halomodel_perr_integrand(x, *test_args[:-1])/(err**2*(beta**2+x**2))
         model = lambda x: x*(test_args[-1]-x)*dh_msto.halomodel_perr_integrand(x, *test_args[:-1])
@@ -668,11 +664,14 @@ class TestPoissonBinomial(unittest.TestCase):
         self.assertAlmostEqual( grad(0.01), scipy.optimize.approx_fprime(np.array([0.01]), model, 1e-12), 8)
         self.assertAlmostEqual( grad(0.99), scipy.optimize.approx_fprime(np.array([0.99]), model, 1e-12), 8)
 
-        test_args = (0.11459087188687923, -1.9315154043531053, 62.460138858539736, -0.6133993246056172, 1.002678948333817, 0.5709469567273955)
+        test_args = (0.11459087188687923, -1.9315154043531053, 62.460138858539736,
+                    -0.6133993246056172,   1.002678948333817,   0.5709469567273955)
+        beta, n, h, mu, err, pmax = test_args
         grad = lambda x: dh_msto.halomodel_perr_logit_grad(x, test_args) \
                        * dh_msto.halomodel_perr_integrand(x, *test_args[:-1])/(err**2*(beta**2+x**2))
         model = lambda x: x*(test_args[-1]-x)*dh_msto.halomodel_perr_integrand(x, *test_args[:-1])
         self.assertAlmostEqual( grad(0.57), scipy.optimize.approx_fprime(np.array([0.57]), model, 1e-12), 8)
+        self.assertAlmostEqual( grad(0.01), scipy.optimize.approx_fprime(np.array([0.01]), model, 1e-12), 8)
 
 if __name__ == '__main__':
     unittest.main()
