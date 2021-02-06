@@ -300,7 +300,7 @@ def log_expmodel_perr(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alpha
                   log_Ams - np.log(a1) + alpha1*(Mms+10-m_mu)]
 
     p_model = np.zeros((4, len(pi_mu)))
-    for ii in range(1): #THIS NEEDS TO BE REVERTED BACK TO 4.
+    for ii in range(4): #THIS NEEDS TO BE REVERTED BACK TO 4.
 
         p_integral = np.zeros(len(pi_mu))
 
@@ -324,15 +324,15 @@ def log_expmodel_perr(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alpha
         # Gauss - Hermite Quadrature
         a = p_min[~legendre]; b = p_max[~legendre]
 
-        args = (beta[~legendre], n*np.ones(len(pi_mu[~legendre])), pi_mu[~legendre], pi_err[~legendre], p_max)
-        p_mode = functions.get_fooroots_ridder_hm(expmodel_perr_logit_grad, a=a, b=b, args=args)
+        args = (beta[~legendre], n*np.ones(len(pi_mu[~legendre])), pi_mu[~legendre], pi_err[~legendre], a, b)
+        p_mode = functions.get_fooroots_ridder_hm(expmodel_perr_logit_grad, a=a+1e-15, b=b, args=args)
 
-        curve = expmodel_perr_d2logIJ_dp2(p_mode, *args[:-1], transform='logit_ab', a=a, b=b) / \
+        curve = expmodel_perr_d2logIJ_dp2(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
                                     functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
         z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
 
         sigma = 1/np.sqrt(-curve)
-        p_integral[~legendre] = functions.integrate_gh_gap(expmodel_perr_integrand, z_mode, sigma, args[:-1], transform='logit_ab', a=a, b=b, degree=10)
+        p_integral[~legendre] = functions.integrate_gh_gap(expmodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=10)
 
         p_model[ii] = p_integral
 
@@ -452,10 +452,15 @@ def expmodel_perr_grad(p, args):
     beta, n, mu, err = args
     return p**3 - mu*p**2 - n*err**2*p - beta*err**2
 
+# @njit
+# def expmodel_perr_logit_grad(p, args):
+#     beta, n, mu, err, pmax = args
+#     return p**4 - (pmax+mu)*p**3 + (pmax*mu - (n+2)*err**2)*p**2 + ( ((n+1)*pmax-beta) * err**2 )*p + beta*pmax*err**2
 @njit
 def expmodel_perr_logit_grad(p, args):
-    beta, n, mu, err, pmax = args
-    return p**4 - (pmax+mu)*p**3 + (pmax*mu - (n+2)*err**2)*p**2 + ( ((n+1)*pmax-beta) * err**2 )*p + beta*pmax*err**2
+    beta, n, mu, err, a, b = args
+    return p**2 * (a+b-2*p) \
+         + (n*p + beta - p**2*(p-mu)/err**2) * (p-a)*(b-p)
 #@njit
 def expmodel_perr_integrand(p, beta, n, mu, err):
     #beta, n, h, mu, err = args
@@ -507,7 +512,7 @@ def log_halomodel_perr(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alph
                   log_Ams - np.log(a1) + alpha1*(Mms+10-m_mu)]
 
     p_model = np.zeros((4, len(pi_mu)))
-    for ii in range(1):
+    for ii in range(4):
 
         p_integral = np.zeros(len(pi_mu))
 
@@ -532,18 +537,19 @@ def log_halomodel_perr(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alph
         # Gauss - Hermite Quadrature
         a = p_min[~legendre]; b = p_max[~legendre]
         args = (beta[~legendre], n*np.ones(len(pi_mu[~legendre])),
-                    hz*np.ones(len(pi_mu[~legendre])), pi_mu[~legendre], pi_err[~legendre], p_max[~legendre])
-        p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad, a=a, b=b, args=args)
-        curve = halomodel_perr_d2logIJ_dp2(p_mode, *args[:-1], transform='logit_ab', a=a, b=b) / \
+                    hz*np.ones(len(pi_mu[~legendre])), pi_mu[~legendre], pi_err[~legendre], a, b)
+        p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad, a=a+1e-15, b=b, args=args)
+        curve = halomodel_perr_d2logIJ_dp2(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
                                     functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
 
         z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
         sigma = 1/np.sqrt(-curve)
-        p_integral[~legendre] = functions.integrate_gh_gap(halomodel_perr_integrand, z_mode, sigma, args[:-1], transform='logit_ab', a=a, b=b, degree=10)
+        p_integral[~legendre] = functions.integrate_gh_gap(halomodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=10)
 
         p_model[ii] = p_integral
 
     log_p = scipy.special.logsumexp(Mag_norm, b=p_model, axis=0)
+    #print(log_p)
 
     return log_pnorm + log_p - 0.5*np.log(2*np.pi) - log_pi_err
 
@@ -552,11 +558,16 @@ def halomodel_perr_grad(p, beta, n, h, mu, err):
     return -p**4 + mu*p**3 - (beta**2-n*err**2)*p**2 + mu*beta**2*p + (n+h)*err**2*beta**2
 @njit
 def halomodel_perr_logit_grad(p, args):
-    beta, n, h, mu, err, pmax = args
+    beta, n, h, mu, err, pmin, pmax = args
     return p**5 - (pmax+mu)*p**4 \
            + ((beta**2+mu*pmax) - (n+2)*err**2)*p**3 \
            + ((n+1)*pmax*err**2 - beta**2*(mu+pmax))*p**2 \
            + (mu*beta**2*pmax - (n+2+h)*beta**2*err**2)*p + ((h+n+1)*pmax)*beta**2*err**2
+@njit
+def halomodel_perr_logit_grad(p, args):
+    beta, n, h, mu, err, a, b = args
+    return p*(beta**2 + p**2) * (a+b-2*p) +\
+          ((n - p*(p-mu)/err**2)*(beta**2+p**2) + h*beta**2) * (p-a)*(b-p)
 @njit
 def halomodel_perr_integrand(p, beta, n, h, mu, err):
     return p**n * (beta**2/p**2 + 1)**(-h/2) * np.exp(-(p-mu)**2/(2*err**2))
@@ -648,28 +659,48 @@ class TestPoissonBinomial(unittest.TestCase):
 
     def test_halo_grad_perr(self):
 
-        test_args = (1,3,2.,0.5,0.1,1.)
+        test_args = (1,3,2.,0.5,0.1,0.,1.)
         grad = lambda x: halomodel_perr_grad(x, *test_args[:-1])
         model = lambda x: halomodel_perr_integrand(x, *test_args[:-1])
         self.assertAlmostEqual( grad(0.01), scipy.optimize.approx_fprime(np.array([0.01]), model, 1e-12), 8)
 
     def test_halo_logit_grad_perr(self):
 
-        test_args = (1,3,2.,0.5,0.1,1.)
+        test_args = (1,3,2.,0.5,0.1,0.,0.,1.)
         beta, n, h, mu, err, pmax = test_args
         grad = lambda x: dh_msto.halomodel_perr_logit_grad(x, test_args) \
-                       * dh_msto.halomodel_perr_integrand(x, *test_args[:-1])/(err**2*(beta**2+x**2))
-        model = lambda x: x*(test_args[-1]-x)*dh_msto.halomodel_perr_integrand(x, *test_args[:-1])
+                       * dh_msto.halomodel_perr_integrand(x, *test_args[:-2])/(x*(beta**2+x**2))
+        model = lambda x: (x-test_args[-2])*(test_args[-1]-x)*dh_msto.halomodel_perr_integrand(x, *test_args[:-2])
 
         self.assertAlmostEqual( grad(0.01), scipy.optimize.approx_fprime(np.array([0.01]), model, 1e-12), 8)
         self.assertAlmostEqual( grad(0.99), scipy.optimize.approx_fprime(np.array([0.99]), model, 1e-12), 8)
 
         test_args = (0.11459087188687923, -1.9315154043531053, 62.460138858539736,
-                    -0.6133993246056172,   1.002678948333817,   0.5709469567273955)
+                     -0.6133993246056172,  1.002678948333817, 0.2, 0.5709469567273955)
         beta, n, h, mu, err, pmax = test_args
         grad = lambda x: dh_msto.halomodel_perr_logit_grad(x, test_args) \
-                       * dh_msto.halomodel_perr_integrand(x, *test_args[:-1])/(err**2*(beta**2+x**2))
-        model = lambda x: x*(test_args[-1]-x)*dh_msto.halomodel_perr_integrand(x, *test_args[:-1])
+                       * dh_msto.halomodel_perr_integrand(x, *test_args[:-2])/(x*(beta**2+x**2))
+        model = lambda x: (x-test_args[-2])*(test_args[-1]-x)*dh_msto.halomodel_perr_integrand(x, *test_args[:-2])
+        self.assertAlmostEqual( grad(0.57), scipy.optimize.approx_fprime(np.array([0.57]), model, 1e-12), 8)
+        self.assertAlmostEqual( grad(0.01), scipy.optimize.approx_fprime(np.array([0.01]), model, 1e-12), 8)
+
+    def test_disk_logit_grad_perr(self):
+
+        test_args = (1,3,2.,0.5,0.1,0.,0.,1.)
+        beta, n, mu, err, a, b = test_args
+        grad = lambda x: dh_msto.expmodel_perr_logit_grad(x, test_args) \
+                       * dh_msto.expmodel_perr_integrand(x, *test_args[:-2])/x**2
+        model = lambda x: (x-test_args[-2])*(test_args[-1]-x)*dh_msto.expmodel_perr_integrand(x, *test_args[:-2])
+
+        self.assertAlmostEqual( grad(0.01), scipy.optimize.approx_fprime(np.array([0.01]), model, 1e-12), 8)
+        self.assertAlmostEqual( grad(0.99), scipy.optimize.approx_fprime(np.array([0.99]), model, 1e-12), 8)
+
+        test_args = (0.11459087188687923, -1.9315154043531053, 62.460138858539736,
+                     -0.6133993246056172,  1.002678948333817, 0.2, 0.5709469567273955)
+        beta, n, mu, err, a, b = test_args
+        grad = lambda x: dh_msto.expmodel_perr_logit_grad(x, test_args) \
+                       * dh_msto.expmodel_perr_integrand(x, *test_args[:-2])/(x*(beta**2+x**2))
+        model = lambda x: (x-test_args[-2])*(test_args[-1]-x)*dh_msto.expmodel_perr_integrand(x, *test_args[:-2])
         self.assertAlmostEqual( grad(0.57), scipy.optimize.approx_fprime(np.array([0.57]), model, 1e-12), 8)
         self.assertAlmostEqual( grad(0.01), scipy.optimize.approx_fprime(np.array([0.01]), model, 1e-12), 8)
 

@@ -69,15 +69,14 @@ if __name__=='__main__':
     nstep=int(nsample/30 * 2 * 5)
     print('Nsample: ', nsample)
 
-
-    alpha1=-0.15; alpha2=-0.3
-    Mms=8.; Mms1=9.; Mms2=7.; Mx=10.7
-    R0=8.27; theta_deg=60
     # Parameters for all three components of the model.
     global_params = {'alpha1':-0.15, 'alpha2':-0.3,
                     'Mms':8., 'Mms1':9., 'Mms2':7., 'Mx':10.7,
                     'R0':8.27, 'theta_deg':60, 'N':nsample}
     # Individual independent component parameters.
+    params = {0: {'hz':0.9, 'alpha3':-0.1,  'Mto':9.5, 'fD':0., 'w':0.2},
+              1: {'hz':1.9, 'alpha3':-0.3, 'Mto':10.7, 'fD':0., 'w':0.3},
+              2: {'hz':4.6, 'alpha3':-0.1,  'Mto':10.0, 'fD':0.,  'w':0.5}}
     params = {0: {'hz':0.9, 'alpha3':-1.,  'Mto':4.8, 'fD':0.94, 'w':0.2},
               1: {'hz':1.9, 'alpha3':-0.5, 'Mto':3.14, 'fD':0.998, 'w':0.3},
               2: {'hz':4.6, 'alpha3':-0.6,  'Mto':3.3, 'fD':0.995,  'w':0.5}}
@@ -92,24 +91,8 @@ if __name__=='__main__':
     j_ngiant = j_nsample - np.round(j_nsample * fdwarf).astype(int)
 
 
+    #%% Magnitude distribution sampling
     nwalkers=30; ndim=1;
-    for j in range(3):
-
-        print('Dwarf %d' % j)
-        def loglike(x):
-            return dwarf_magnitude(x, alpha1=global_params['alpha1'], alpha2=global_params['alpha2'],
-                                 Mto=params[j]['Mto'], Mms=global_params['Mms'],
-                                 Mms1=global_params['Mms1'], Mms2=global_params['Mms2'], Mx=global_params['Mx'])
-
-        p0_walkers = np.random.rand(nwalkers,1) * (global_params['Mms1']-params[j]['Mto']) + params[j]['Mto']
-
-        with Pool(ncores) as pool:
-            sampler = emcee.EnsembleSampler(nwalkers, ndim, loglike, pool=pool)
-            for pos,lnp,rstate in tqdm.tqdm(sampler.sample(p0_walkers, iterations=nstep), total=nstep):
-                pass
-
-        burnt_samples[j]['M_dwarfs'] = np.reshape(sampler.chain[:, int(nstep/2):, :][:,::3,:], (-1,1)).copy().T[0]
-
     for j in range(3):
         print('Giant %d' % j)
         def loglike(x):
@@ -126,18 +109,10 @@ if __name__=='__main__':
 
 
     for j in range(3):
-        # ndwarf = int(nsample * params[j]['w'] * params[j]['fD'])
-        # ngiant = int(nsample * params[j]['w'] * (1-params[j]['fD']))
-
-        dwarf_sample = np.random.choice(np.arange(burnt_samples[j]['M_dwarfs'].shape[0]), j_ndwarf[j], replace=False)
         giant_sample = np.random.choice(np.arange(burnt_samples[j]['M_giants'].shape[0]), j_ngiant[j], replace=False)
 
-        order = np.random.choice(np.arange(len(dwarf_sample)+len(giant_sample)),
-                                      size=len(dwarf_sample)+len(giant_sample), replace=False)
-        selected_samples[j]['M'] = np.hstack((burnt_samples[j]['M_dwarfs'][dwarf_sample],
-                                              burnt_samples[j]['M_giants'][giant_sample]))[order]
-        selected_samples[j]['Dwarf'] = np.hstack((np.ones(len(dwarf_sample)).astype(int),
-                                                  np.zeros(len(giant_sample)).astype(int)))[order]
+        order = np.random.choice(np.arange(len(giant_sample)), size=len(giant_sample), replace=False)
+        selected_samples[j]['M'] = burnt_samples[j]['M_giants'][giant_sample][order]
 
 
     #%% Position distribution sampling
