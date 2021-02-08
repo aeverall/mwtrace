@@ -9,22 +9,6 @@ import disk_halo_mstogap as dh_msto
 from transformations import func_inv_jac
 
 
-# param_trans = {}
-# param_trans['shd'] = {'alpha1':func_inv_jac['nexp']+(-10,10),
-#                       'alpha2':func_inv_jac['nexp']+(-10,10)}
-# param_trans[0] = {'w':func_inv_jac['exp']+(-10,10),
-#                   'fD': transformations.logit_scaled(0,1)+(-10,10),
-#                   'alpha3':func_inv_jac['nexp']+(-10,10),
-#                   'hz': transformations.logit_scaled(0,  1.2)+(-10,10)}
-# param_trans[1] = {'w':func_inv_jac['exp']+(-10,10),
-#                   'fD': transformations.logit_scaled(0,1)+(-10,10),
-#                   'alpha3':func_inv_jac['nexp']+(-10,10),
-#                   'hz': transformations.logit_scaled(1.2,3  )+(-10,10)}
-# param_trans[2] = {'w':func_inv_jac['exp']+(-10,10),
-#                   'fD': transformations.logit_scaled(0,1)+(-10,10),
-#                   'alpha3':func_inv_jac['nexp']+(-10,10),
-#                   'hz': transformations.logit_scaled(3,  7.3)+(-10,10)}
-
 param_trans = {}
 param_trans['shd'] = {'alpha1':('nexp',0,0,-3,3),
                       'alpha2':('nexp',0,0,-3,3)}
@@ -89,13 +73,13 @@ if __name__=='__main__':
     savefile = "/data/asfe2/Projects/mwtrace_data/mockmodel/fits_allcmpt.h"
     if os.path.exists(savefile): raise ValueError('File: %s already exists!' % savefile)
 
-    nsteps=10000; ncores=1;
+    nsteps=1000; ncores=2;
 
     # output dictionary:
     output = {}
 
     # Load Sample
-    size = 10000
+    size = 1000
     sample = {}; true_pars={}; latent_pars={};
     filename = '/data/asfe2/Projects/mwtrace_data/mockmodel/sample.h'
     with h5py.File(filename, 'r') as hf:

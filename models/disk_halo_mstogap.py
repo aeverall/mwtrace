@@ -479,7 +479,6 @@ def expmodel_perr_d2logIJ_dp2(p, beta, n, mu, err, transform='none', b=None, a=N
 def log_halomodel_perr(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
                                 Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, degree=21):
 
-
     ep1=1.3; ep2=2.3;
     a1=-np.log(10)*(ep1-1)/(2.5*alpha1); a2=-np.log(10)*(ep2-1)/(2.5*alpha2);
 

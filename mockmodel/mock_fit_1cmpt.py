@@ -73,8 +73,8 @@ def save_hdf5(chain_dict, filename):
 
 if __name__=='__main__':
 
-    cmpt = 0
-    savefile = "/data/asfe2/Projects/mwtrace_data/mockmodel/fits_dwarfs_cmpt%d.h" % cmpt
+    cmpt = 2
+    savefile = "/data/asfe2/Projects/mwtrace_data/mockmodel/fits_dwarfs_cmpt%d_test.h" % cmpt
     if os.path.exists(savefile): raise ValueError('File: %s already exists!' % savefile)
 
     nsteps=1000; ncores=2;
@@ -104,7 +104,7 @@ if __name__=='__main__':
 
     fid_pars = {'Mmax':true_pars['Mx'],  'lat_min':np.deg2rad(true_pars['theta_deg']), 'R0':true_pars['R0'],
                 'free_pars':{}, 'fixed_pars':{}, 'functions':{}, 'functions_inv':{}, 'jacobians':{}, 'w':True,
-                'models':[dh_msto.log_expmodel_grad], 'components':['disk'], 'ncomponents':1}
+                'components':['disk'], 'ncomponents':1}
 
     fid_pars['free_pars'][0] = ['w', 'hz']
     fid_pars['free_pars']['shd'] = ['alpha1', 'alpha2']
@@ -116,13 +116,13 @@ if __name__=='__main__':
     fid_pars['functions']={}; fid_pars['functions_inv']={}; fid_pars['jacobians']={}; bounds=[]
     params_i = 0
     #for cmpt in np.arange(fid_pars['ncomponents']).tolist()+['shd',]:
-    for cmpt in [cmpt]+['shd',]:
-        fid_pars['functions'][cmpt]={}; fid_pars['functions_inv'][cmpt]={}; fid_pars['jacobians'][cmpt]={}
-        for par in fid_pars['free_pars'][cmpt]:
-            fid_pars['functions'][cmpt][par], \
-            fid_pars['functions_inv'][cmpt][par], \
-            fid_pars['jacobians'][cmpt][par]=func_inv_jac[param_trans[cmpt][par][0]](*param_trans[cmpt][par][1:3])
-            bounds.append([param_trans[cmpt][par][3], param_trans[cmpt][par][4]])
+    for i, cmpt_local in enumerate([0,]+['shd',]):
+        fid_pars['functions'][cmpt_local]={}; fid_pars['functions_inv'][cmpt_local]={}; fid_pars['jacobians'][cmpt_local]={}
+        for par in fid_pars['free_pars'][cmpt_local]:
+            fid_pars['functions'][cmpt_local][par], \
+            fid_pars['functions_inv'][cmpt_local][par], \
+            fid_pars['jacobians'][cmpt_local][par]=func_inv_jac[param_trans[[cmpt,'shd'][i]][par][0]](*param_trans[[cmpt,'shd'][i]][par][1:3])
+            bounds.append([param_trans[[cmpt,'shd'][i]][par][3], param_trans[[cmpt,'shd'][i]][par][4]])
             params_i += 1;
     bounds = np.array(bounds).T
 
@@ -145,6 +145,8 @@ if __name__=='__main__':
         sample_2d = np.vstack((1/sample['s'], np.log(1/sample['s']),
                                  sample['sinb'], np.log(np.sqrt(1-sample['sinb']**2)),
                                  sample['m']))
+        if cmpt==2: fid_pars['models']=[dh_msto.log_halomodel_grad]
+        else: fid_pars['models']=[dh_msto.log_expmodel_grad]
         poisson_kwargs_global = {'sample':sample_2d,
                                  'logmodel': dh_msto.logmodel_grad, 'model_integrate':dh_msto.integral_model,
                                  'param_bounds':bounds, 'gmm':None, 'bins':([0,np.inf],[-np.inf,np.inf]),
@@ -162,11 +164,22 @@ if __name__=='__main__':
         sample_2d = np.vstack((sample['parallax_obs'], sample['parallax_error'],
                                np.abs(sample['sinb']), np.log(np.sqrt(1-sample['sinb']**2)),
                                sample['m'], np.log(sample['parallax_error'])))
-        fid_pars['models']=[dh_msto.log_expmodel_perr]
+        if cmpt==2: fid_pars['models']=[dh_msto.log_halomodel_perr]
+        else: fid_pars['models']=[dh_msto.log_expmodel_perr]
         poisson_kwargs_global = {'sample':sample_2d, 'logmodel': dh_msto.logmodel_perr, 'model_integrate':dh_msto.integral_model,
                                  'param_bounds':bounds, 'gmm':None, 'bins':([0,np.inf],[-np.inf,np.inf]),
                                  'fid_pars':fid_pars, 'model_prior':None}
-        print('poisson_like(p0): %.2e' % poisson_like(p0))
+        i_break=0
+        like = poisson_like(p0)
+        print('poisson_like(p0): %.2e' % like)
+        while np.isinf(like)&(i_break<20):
+            p0 = np.array( [transformations.logit(np.random.rand()),
+                            transformations.logit(np.random.rand()),
+                            -np.random.rand()*1,
+                            -np.random.rand()*1] )
+            like = poisson_like(p0)
+            print('poisson_like(p0): %.2e' % like)
+            i_break+=1
 
         sampler = samplers.run_mcmc_global(p0, poisson_like, bounds, nstep=nsteps, ncores=ncores, notebook=False)
         output['chain']['full_perr'] = sampler.chain
