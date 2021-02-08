@@ -99,7 +99,6 @@ if __name__=='__main__':
 
     fid_pars = {'Mmax':true_pars['Mx'],  'lat_min':np.deg2rad(true_pars['theta_deg']), 'R0':true_pars['R0'],
                 'free_pars':{}, 'fixed_pars':{}, 'functions':{}, 'functions_inv':{}, 'jacobians':{}, 'w':True,
-                'models':[dh_msto.log_expmodel_grad, dh_msto.log_expmodel_grad, dh_msto.log_halomodel_grad],
                 'components':['disk','disk','halo'], 'ncomponents':3}
 
     fid_pars['free_pars'][0] = ['w', 'hz']
@@ -109,7 +108,7 @@ if __name__=='__main__':
 
     fid_pars['fixed_pars'][0] = {'Mms':true_pars['Mms'], 'fD':1.-1e-15, 'alpha3':true_pars['0']['alpha3'],
                                  'Mms1':true_pars['Mms1'], 'Mms2':true_pars['Mms2'],
-                                 'Mto':true_pars[str(cmpt)]['Mto']}
+                                 'Mto':true_pars['0'']['Mto']}
     fid_pars['fixed_pars'][1] = copy(fid_pars['fixed_pars'][0]); fid_pars['fixed_pars'][2] = copy(fid_pars['fixed_pars'][0])
     fid_pars['fixed_pars'][1]['Mto'] = true_pars['1']['Mto']
     fid_pars['fixed_pars'][2]['Mto'] = true_pars['2']['Mto']
@@ -145,6 +144,7 @@ if __name__=='__main__':
         sample_2d = np.vstack((1/sample['s'], np.log(1/sample['s']),
                                  sample['sinb'], np.log(np.sqrt(1-sample['sinb']**2)),
                                  sample['m']))
+        fid_pars['models']=[dh_msto.log_expmodel_grad, dh_msto.log_expmodel_grad, dh_msto.log_halomodel_grad]
         poisson_kwargs_global = {'sample':sample_2d,
                                  'logmodel': dh_msto.logmodel_grad, 'model_integrate':dh_msto.integral_model,
                                  'param_bounds':bounds, 'gmm':None, 'bins':([0,np.inf],[-np.inf,np.inf]),
@@ -162,7 +162,7 @@ if __name__=='__main__':
         sample_2d = np.vstack((sample['parallax_obs'], sample['parallax_error'],
                                np.abs(sample['sinb']), np.log(np.sqrt(1-sample['sinb']**2)),
                                sample['m'], np.log(sample['parallax_error'])))
-        fid_pars['models']=[dh_msto.log_expmodel_perr]
+        fid_pars['models']=[dh_msto.log_expmodel_perr, dh_msto.log_expmodel_perr, dh_msto.log_halomodel_perr]
         poisson_kwargs_global = {'sample':sample_2d, 'logmodel': dh_msto.logmodel_perr, 'model_integrate':dh_msto.integral_model,
                                  'param_bounds':bounds, 'gmm':None, 'bins':([0,np.inf],[-np.inf,np.inf]),
                                  'fid_pars':fid_pars, 'model_prior':None}

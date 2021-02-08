@@ -32,4 +32,4 @@ func_labels = {'none': lambda s, a, b: s,
                 'logit':lambda s, a, b: r'logit$({0})$'.format(s.replace('$','')),
                 'logit_scaled':logit_label}#ambda s, a, b: r'$logit(({0}-{1})/({2}-{1}))$'.format(s.replace('$',''),a,b)}
 
-label_dict = {'alpha1':r'$\alpha_1$', 'alpha2':r'$\alpha_2$', 'hz':r'$h_z$', 'w':r'$w$'}
+label_dict = {'alpha1':r'$\alpha_1$', 'alpha2':r'$\alpha_2$', 'alpha3':r'$\alpha_3$', 'hz':r'$h_z$', 'w':r'$w$'}

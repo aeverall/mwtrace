@@ -73,8 +73,8 @@ def save_hdf5(chain_dict, filename):
 
 if __name__=='__main__':
 
-    cmpt = 2
-    savefile = "/data/asfe2/Projects/mwtrace_data/mockmodel/fits_dwarfs_cmpt%d_test.h" % cmpt
+    cmpt = 0
+    savefile = "/data/asfe2/Projects/mwtrace_data/mockmodel/fits_cmpt%d.h" % cmpt
     if os.path.exists(savefile): raise ValueError('File: %s already exists!' % savefile)
 
     nsteps=1000; ncores=2;
@@ -87,8 +87,8 @@ if __name__=='__main__':
     sample = {}; true_pars={}; latent_pars={};
     filename = '/data/asfe2/Projects/mwtrace_data/mockmodel/sample.h'
     with h5py.File(filename, 'r') as hf:
-        subset = (hf['sample']['cmpt'][...]==cmpt)&\
-                    (hf['sample']['M'][...]>hf['true_pars'][str(cmpt)]['Mto'][...])
+        subset = (hf['sample']['cmpt'][...]==cmpt)#&\
+                    #(hf['sample']['M'][...]>hf['true_pars'][str(cmpt)]['Mto'][...])
         subsample  = np.sort(np.random.choice(np.arange(np.sum(subset)), size=size, replace=False))
         for key in hf['sample'].keys():
             sample[key]=hf['sample'][key][...][subset][subsample]
@@ -106,7 +106,7 @@ if __name__=='__main__':
                 'free_pars':{}, 'fixed_pars':{}, 'functions':{}, 'functions_inv':{}, 'jacobians':{}, 'w':True,
                 'components':['disk'], 'ncomponents':1}
 
-    fid_pars['free_pars'][0] = ['w', 'hz']
+    fid_pars['free_pars'][0] = ['w', 'hz', 'alpha3']
     fid_pars['free_pars']['shd'] = ['alpha1', 'alpha2']
 
     fid_pars['fixed_pars'][0] = {'Mms':true_pars['Mms'], 'fD':1.-1e-15, 'alpha3':true_pars['0']['alpha3'],
@@ -137,6 +137,7 @@ if __name__=='__main__':
 
     p0 = np.array( [transformations.logit(np.random.rand()),
                     transformations.logit(np.random.rand()),
+                    -np.random.rand()*1,
                     -np.random.rand()*1,
                     -np.random.rand()*1] )
 
@@ -175,6 +176,7 @@ if __name__=='__main__':
         while np.isinf(like)&(i_break<20):
             p0 = np.array( [transformations.logit(np.random.rand()),
                             transformations.logit(np.random.rand()),
+                            -np.random.rand()*1,
                             -np.random.rand()*1,
                             -np.random.rand()*1] )
             like = poisson_like(p0)
