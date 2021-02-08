@@ -199,3 +199,4 @@ if __name__=='__main__':
                       'm','parallax_error', 'parallax_obs','m_err','m_obs']:
                 print(k, len(selected_samples[k]))
                 hf.create_dataset('sample/'+k, data=selected_samples[k])
+            hf.create_dataset('sample/source_id', data=np.arange(len(selected_samples['s']))

@@ -44,7 +44,7 @@ def run_mcmc(p0, poisson_kwargs, nstep=1000, ncores=1):
     param_bounds=poisson_kwargs['param_bounds']
     p0_walkers = np.random.normal(p0, np.abs(p0/100), size=(nwalkers,ndim))
     unbound = (p0_walkers<=param_bounds[0])|(p0_walkers>=param_bounds[1])
-    if np.sum(unbound)>0: print("p0 outside bounds: ", print(np.sum(unbound)))
+    if np.sum(unbound)>0: print("p0 outside bounds: ", np.sum(unbound))
 
     with Pool(ncores) as pool:
         sampler = emcee.EnsembleSampler(nwalkers, ndim, poisson_like, kwargs=poisson_kwargs, pool=pool)
