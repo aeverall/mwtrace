@@ -1,5 +1,8 @@
 import sys, os, pickle, time, warnings
-
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
 import numpy as np, pandas as pd, scipy, scipy.stats as stats, tqdm, h5py
 from copy import deepcopy as copy
 
@@ -73,7 +76,10 @@ def save_hdf5(chain_dict, filename):
 
 if __name__=='__main__':
 
-    cmpt = 0
+    cmpt = 1os.environ['OPENBLAS_NUM_THREADS'] = '1'
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["MKL_NUM_THREADS"] = "1"
+    os.environ["NUMEXPR_NUM_THREADS"] = "1"
     savefile = "/data/asfe2/Projects/mwtrace_data/mockmodel/fits_cmpt%d.h" % cmpt
     if os.path.exists(savefile): raise ValueError('File: %s already exists!' % savefile)
 
@@ -106,7 +112,7 @@ if __name__=='__main__':
                 'free_pars':{}, 'fixed_pars':{}, 'functions':{}, 'functions_inv':{}, 'jacobians':{}, 'w':True,
                 'components':['disk'], 'ncomponents':1}
 
-    fid_pars['free_pars'][0] = ['w', 'hz', 'alpha3']
+    fid_pars['free_pars'][0] = ['w', 'hz', 'alpha3', 'fD']
     fid_pars['free_pars']['shd'] = ['alpha1', 'alpha2']
 
     fid_pars['fixed_pars'][0] = {'Mms':true_pars['Mms'], 'fD':1.-1e-15, 'alpha3':true_pars['0']['alpha3'],
@@ -136,6 +142,7 @@ if __name__=='__main__':
     output['chain'] = {}; output['lnprob'] = {}
 
     p0 = np.array( [transformations.logit(np.random.rand()),
+                    transformations.logit(np.random.rand()),
                     transformations.logit(np.random.rand()),
                     -np.random.rand()*1,
                     -np.random.rand()*1,
@@ -175,6 +182,7 @@ if __name__=='__main__':
         print('poisson_like(p0): %.2e' % like)
         while np.isinf(like)&(i_break<20):
             p0 = np.array( [transformations.logit(np.random.rand()),
+                            transformations.logit(np.random.rand()),
                             transformations.logit(np.random.rand()),
                             -np.random.rand()*1,
                             -np.random.rand()*1,

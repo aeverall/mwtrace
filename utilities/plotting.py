@@ -220,7 +220,7 @@ def corner_new(xs, bins=20, range=None, weights=None, color="k", linestyle='-',
 
     # Create a new figure if one wasn't provided.
     if fig is None:
-        fig, axes = pl.subplots(K, K, figsize=(dim, dim))
+        fig, axes = plt.subplots(K, K, figsize=(dim, dim))
     else:
         try:
             axes = np.array(fig.axes).reshape((K, K))
@@ -430,7 +430,7 @@ def hist2d(x, y, bins=20, range=None, weights=None, levels=None, smooth=None,
 
     """
     if ax is None:
-        ax = pl.gca()
+        ax = plt.gca()
 
     # Set the default range based on the data range if not provided.
     if range is None:
