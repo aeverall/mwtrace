@@ -420,19 +420,19 @@ def log_expmodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., 
     # alpha1
     dalphag_dalpha1 = (-1/alpha1 - (Mms-Mms1))/(Mms1-Mms2)
     dlnAms_dalpha1 = -1/alpha1 - np.sum(b_alpha1*np.exp(Ams_exponent))*Ams/(fD*a1*a2)
-    grad_lambda[:,4] = dlnAms_dalpha1 \
+    grad_lambda[:,4] = (dlnAms_dalpha1 * np.sum(p_model[1:]*np.exp(Mag_norm[1:])) \
                         + (np.exp(Mag_norm[3]) * ((1/alpha1 + (Mms+10-m_mu)) * p_model[3] \
                                                 - 5/ln10 * dp_model_dn[3]) \
                         +  np.exp(Mag_norm[2]) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)) * p_model[2] \
-                                                - 5/ln10 * dalphag_dalpha1 * dp_model_dn[2]))/exp_log_p
+                                                - 5/ln10 * dalphag_dalpha1 * dp_model_dn[2])))/exp_log_p
     # alpha2
     dalphag_dalpha2 = (1/alpha2 + (Mms-Mms2))/(Mms1-Mms2)
     dlnAms_dalpha2 = -1/alpha2 - np.sum(b_alpha2*np.exp(Ams_exponent))*Ams/(fD*a1*a2)
-    grad_lambda[:,5] = dlnAms_dalpha2 \
+    grad_lambda[:,5] = (dlnAms_dalpha2 * np.sum(p_model[1:]*np.exp(Mag_norm[1:])) \
                         + (np.exp(Mag_norm[1]) * ((1/alpha2 + (Mms+10-m_mu)) * p_model[1] \
-                                                   - 5/ln10 * dp_model_dn[1]) \
+                                                - 5/ln10 * dp_model_dn[1]) \
                         +  np.exp(Mag_norm[2]) * (dalphag_dalpha2*(Mms1+10-m_mu) * p_model[2] \
-                                                    - 5/ln10 * dalphag_dalpha2 * dp_model_dn[2]))/exp_log_p
+                                                    - 5/ln10 * dalphag_dalpha2 * dp_model_dn[2])))/exp_log_p
 
 
     # grad_lambda[:,4] = dlnAms_dalpha1
@@ -719,7 +719,7 @@ def expmodel_perr_logit_grad_dn(p, args):
 @njit
 def expmodel_perr_d2logIJ_dp2_dn(p, beta, n, mu, err, transform='none', b=None, a=None):
     log_p = np.log(p)
-    d2logI_dp2 = -(log_p + 1/p)/(p**2 * log_p**2) - n/p**2 - 2*beta/p**3 - 1/err**2
+    d2logI_dp2 = -(log_p + 1)/(p**2 * log_p**2) - n/p**2 - 2*beta/p**3 - 1/err**2
     if   transform=='none':     return d2logI_dp2
     elif transform=='logit':    return d2logI_dp2 - 1/p**2 - 1/(p-b)**2
     elif transform=='logit_ab': return d2logI_dp2 - 1/(p-a)**2 - 1/(p-b)**2
@@ -804,25 +804,237 @@ def log_halomodel_perr(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alph
 
     return log_pnorm + log_p - 0.5*np.log(2*np.pi) - log_pi_err
 
+def log_halomodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
+                                Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, degree=21, grad=False):
+
+    ep1=1.3; ep2=2.3;
+    a1=-ln10*(ep1-1)/(2.5*alpha1); a2=-ln10*(ep2-1)/(2.5*alpha2);
+
+    alphag = (np.log(a1/a2) - alpha1*(Mms-Mms1) + alpha2*(Mms-Mms2))/(Mms1-Mms2)
+    Ag = 1/a1 * np.exp((alpha1-alphag)*(Mms-Mms1))
+
+    # Latent variables
+    n1 = -(4 + alpha1*5/ln10)
+    ng = -(4 + alphag*5/ln10)
+    n2 = -(4 + alpha2*5/ln10)
+    n3 = -(4 + alpha3*5/ln10)
+
+    Ams_exponent = np.array([alpha1*(Mms-Mms1), alpha1*(Mms-Mx),
+                        alpha1*(Mms-Mms1)+alphag*(Mms1-Mms2), alpha1*(Mms-Mms1),
+                        alpha2*(Mms-Mto), alpha2*(Mms-Mms2)])
+    Ams_coeff = np.array([a2/alpha1, -a2/alpha1, a2/alphag, -a2/alphag, a1/alpha2, -a1/alpha2])
+    log_Ams = np.log( fD*a1*a2 ) - scipy.special.logsumexp(Ams_exponent,b=Ams_coeff)
+    log_AG = np.log(-alpha3) + np.log(1-fD)
+
+    beta = abs_sin_lat/R0
+    log_pnorm = np.log(8) + scipy.special.gammaln(hz/2) - 3*np.log(R0) - 0.5*np.log(np.pi) - scipy.special.gammaln((hz-3)/2)
+
+    # Absolute magnitude not known
+    Mag_bounds = [-np.inf, Mto, Mms2, Mms1, Mx]
+    Mag_n =      [n3,  n2,   ng,   n1]
+    Mag_norm =   [log_AG  + alpha3*(Mto+10-m_mu),
+                  log_Ams - np.log(a2) + alpha2*(Mms+10-m_mu),
+                  log_Ams + np.log(Ag) + alphag*(Mms+10-m_mu),
+                  log_Ams - np.log(a1) + alpha1*(Mms+10-m_mu)]
+
+    p_model = np.zeros((4, len(pi_mu)))
+    for ii in range(4):
+
+        p_integral = np.zeros(len(pi_mu))
+
+        n = Mag_n[ii]
+        p_min = np.exp((Mag_bounds[ii  ]+10-m_mu)*ln10/5)
+        p_max = np.exp((Mag_bounds[ii+1]+10-m_mu)*ln10/5)
+
+        args = (beta, n*np.ones(len(pi_mu)), hz*np.ones(len(pi_mu)), pi_mu, pi_err)
+        grad_min = halomodel_perr_grad(p_min, *args)
+        grad_max = halomodel_perr_grad(p_max, *args)
+        legendre = grad_min*grad_max>0
+        legendre[:]=False
+
+        # Gauss - Legendre Quadrature
+        a = p_min[legendre]; b = p_max[legendre]
+        args = (beta[legendre], n*np.ones(len(pi_mu))[legendre],
+                    hz*np.ones(len(pi_mu))[legendre], pi_mu[legendre], pi_err[legendre])
+        leg_nodes, leg_weights = np.polynomial.legendre.leggauss(degree)
+        leg_nodes = leg_nodes[np.newaxis,:].T * (b-a)/2 + (b+a)/2
+        p_integral[legendre] = np.sum(halomodel_perr_integrand(leg_nodes, *args), axis=0)
+
+        # Gauss - Hermite Quadrature
+        a = p_min[~legendre]; b = p_max[~legendre]
+        args = (beta[~legendre], n*np.ones(len(pi_mu[~legendre])),
+                    hz*np.ones(len(pi_mu[~legendre])), pi_mu[~legendre], pi_err[~legendre], a, b)
+        p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad, a=a+1e-15, b=b, args=args)
+        curve = halomodel_perr_d2logIJ_dp2(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
+                                    functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
+
+        z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
+        sigma = 1/np.sqrt(-curve)
+        p_integral[~legendre] = functions.integrate_gh_gap(halomodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=10)
+
+        p_model[ii] = p_integral
+
+    log_p = scipy.special.logsumexp(Mag_norm, b=p_model, axis=0)
+    log_lambda = log_pnorm + log_p - 0.5*np.log(2*np.pi) - log_pi_err
+    if not grad: return log_lambda
+
+    exp_log_p = np.exp(log_p)
+
+    grad_lambda = np.zeros((pi_mu.shape[0], 6)) + np.nan
+    # hz
+    dp_model_dhz = np.zeros((4, len(pi_mu)))
+    for ii in range(4): # Run integration with n -> n-1
+        p_integral = np.zeros(len(pi_mu))
+        a = np.exp((Mag_bounds[ii  ]+10-m_mu)*ln10/5)
+        b = np.exp((Mag_bounds[ii+1]+10-m_mu)*ln10/5)
+        n = Mag_n[ii]
+        # Gauss - Hermite Quadrature
+        args = (beta, n*np.ones(len(pi_mu)), hz*np.ones(len(pi_mu)), pi_mu, pi_err, a, b)
+        p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad_dh, a=a+1e-15, b=b, args=args)
+        curve = halomodel_perr_d2logIJ_dp2_dh(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
+                                    functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
+        z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
+        sigma = 1/np.sqrt(-curve)
+        p_integral = functions.integrate_gh_gap(halomodel_perr_integrand_dh, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=degree)
+        dp_model_dhz[ii] = p_integral
+    grad_lambda[:,0] = scipy.special.digamma(hz/2)/2 - scipy.special.digamma((hz-3)/2)/2 + np.sum(dp_model_dhz*np.exp(Mag_norm), axis=0)/exp_log_p
+    # n
+    dp_model_dn = np.zeros((4, len(pi_mu)))
+    for ii in range(4): # Run integration with log(p)p^n
+        p_integral = np.zeros(len(pi_mu))
+        a = np.exp((Mag_bounds[ii  ]+10-m_mu)*ln10/5)
+        b = np.exp((Mag_bounds[ii+1]+10-m_mu)*ln10/5)
+        n = Mag_n[ii]
+        # Gauss - Hermite Quadrature
+        args = (beta, n*np.ones(len(pi_mu)), hz*np.ones(len(pi_mu)), pi_mu, pi_err, a, b)
+        p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad_dn, a=a+1e-15, b=b, args=args)
+        curve = halomodel_perr_d2logIJ_dp2_dn(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
+                                    functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
+        z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
+        sigma = 1/np.sqrt(-curve)
+        p_integral = functions.integrate_gh_gap(halomodel_perr_integrand_dn, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=degree)
+        dp_model_dn[ii] = p_integral
+    # alpha3
+    grad_lambda[:,1] = np.exp(Mag_norm[0])*((1/alpha3 + Mto+10-m_mu)*p_model[0] - 5/ln10*dp_model_dn[0])/exp_log_p
+    # fD
+    grad_lambda[:,2] = ( p_model[0]*np.exp(Mag_norm[0])/(fD-1) + np.sum(p_model[1:]*np.exp(Mag_norm[1:]), axis=0)/fD )/exp_log_p
+
+    # alpha 1/2
+    b_alpha1 = np.array([a2/alpha1 * ((Mms-Mms1)-1/alpha1),
+                        -a2/alpha1 * ((Mms-Mx)  -1/alpha1),
+                        a2/alphag * (-1/alpha1 + 1/alphag * ( 1/alpha1 + (Mms-Mms1))/(Mms1-Mms2)),
+                       -a2/alphag * ((Mms-Mms1)+ 1/alphag * ( 1/alpha1 + (Mms-Mms1))/(Mms1-Mms2)),
+                       -a1/(alpha1*alpha2),
+                        a1/(alpha1*alpha2)])
+    b_alpha2 = np.array([-a2/(alpha1*alpha2),
+                         a2/(alpha1*alpha2),
+                         a2/alphag * ((Mms-Mms2)- 1/alphag * ( 1/alpha2 + (Mms-Mms2))/(Mms1-Mms2)),
+                         a2/alphag * ( 1/alpha2 + 1/alphag * ( 1/alpha2 + (Mms-Mms2))/(Mms1-Mms2)),
+                         a1/alpha2 * ((Mms-Mto) - 1/alpha2),
+                        -a1/alpha2 * ((Mms-Mms2)- 1/alpha2)])
+    Ams = np.exp(log_Ams)
+    # alpha1
+    dalphag_dalpha1 = (-1/alpha1 - (Mms-Mms1))/(Mms1-Mms2)
+    dlnAms_dalpha1 = -1/alpha1 - np.sum(b_alpha1*np.exp(Ams_exponent))*Ams/(fD*a1*a2)
+    grad_lambda[:,4] = (dlnAms_dalpha1 * np.sum(p_model[1:]*np.exp(Mag_norm[1:])) \
+                        + (np.exp(Mag_norm[3]) * ((1/alpha1 + (Mms+10-m_mu)) * p_model[3] \
+                                                - 5/ln10 * dp_model_dn[3]) \
+                        +  np.exp(Mag_norm[2]) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)) * p_model[2] \
+                                                - 5/ln10 * dalphag_dalpha1 * dp_model_dn[2])))/exp_log_p
+    # alpha2
+    dalphag_dalpha2 = (1/alpha2 + (Mms-Mms2))/(Mms1-Mms2)
+    dlnAms_dalpha2 = -1/alpha2 - np.sum(b_alpha2*np.exp(Ams_exponent))*Ams/(fD*a1*a2)
+    grad_lambda[:,5] = (dlnAms_dalpha2 * np.sum(p_model[1:]*np.exp(Mag_norm[1:])) \
+                        + (np.exp(Mag_norm[1]) * ((1/alpha2 + (Mms+10-m_mu)) * p_model[1] \
+                                                - 5/ln10 * dp_model_dn[1]) \
+                        +  np.exp(Mag_norm[2]) * (dalphag_dalpha2*(Mms1+10-m_mu) * p_model[2] \
+                                                    - 5/ln10 * dalphag_dalpha2 * dp_model_dn[2])))/exp_log_p
+    #itest=0
+    #log_p = p_model[itest];
+    #grad_lambda[:,0] = dp_model_dhz[itest]
+    #grad_lambda[:,0] = np.sum(dp_model_dhz*np.exp(Mag_norm), axis=0)/exp_log_p
+    # grad_lambda[:,1] = -5/ln10 * dp_model_dn[itest]
+    # grad_lambda[:,4] = -5/ln10 * dp_model_dn[itest]
+    # grad_lambda[:,5] = -5/ln10 * dp_model_dn[itest]
+
+    # grad_lambda[:,4] = dlnAms_dalpha1
+    # grad_lambda[:,5] = dlnAms_dalpha2
+    # return log_Ams, grad_lambda.T
+
+    # log_p = np.log(p_model[0]*np.exp(Mag_norm[0]) + p_model[2]*np.exp(Mag_norm[2]) + p_model[3]*np.exp(Mag_norm[3]) + p_model[1]*np.exp(Mag_norm[1]))
+    # log_p = np.log(p_model[0]) + Mag_norm[0]
+    # log_p = scipy.special.logsumexp(Mag_norm[1:], b=p_model[1:], axis=0)
+    # # grad_lambda[:,4] = dlnAms_dalpha1 \
+    # #                     + (np.exp(Mag_norm[3]) * ((1/alpha1 + (Mms+10-m_mu)) * p_model[3] \
+    # #                                             - 5/ln10 * dp_model_dn[3]) \
+    # #                     +  np.exp(Mag_norm[2]) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)) * p_model[2] \
+    # #                                             - 5/ln10 * dalphag_dalpha1 * dp_model_dn[2]))/np.exp(log_p)
+    # # grad_lambda[:,4] = (dlnAms_dalpha1 * np.sum(p_model[1:]*np.exp(Mag_norm[1:])) \
+    # #                     + (np.exp(Mag_norm[3]) * ((1/alpha1 + (Mms+10-m_mu)) * p_model[3] \
+    # #                                             - 5/ln10 * dp_model_dn[3]) \
+    # #                     +  np.exp(Mag_norm[2]) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)) * p_model[2] \
+    # #                                             - 5/ln10 * dalphag_dalpha1 * dp_model_dn[2])))*1/np.exp(log_p)
+    # grad_lambda[:,5] = (dlnAms_dalpha2 * np.sum(p_model[1:]*np.exp(Mag_norm[1:])) \
+    #                     + (np.exp(Mag_norm[1]) * ((1/alpha2 + (Mms+10-m_mu)) * p_model[1] \
+    #                                             - 5/ln10 * dp_model_dn[1]) \
+    #                     +  np.exp(Mag_norm[2]) * (dalphag_dalpha2*(Mms1+10-m_mu) * p_model[2] \
+    #                                                 - 5/ln10 * dalphag_dalpha2 * dp_model_dn[2])))/np.exp(log_p)
+    # itest=3
+    # log_p = np.log(p_model[itest]) + Mag_norm[itest]
+    # grad_lambda[:,4] = dlnAms_dalpha1 +\
+    #                     np.exp(Mag_norm[itest]) * ((1/alpha1 + (Mms+10-m_mu)) * p_model[3] \
+    #                                              - 5/ln10 * dp_model_dn[3])/np.exp(log_p)
+    # itest=1
+    # log_p = np.log(p_model[itest]) + Mag_norm[itest]
+    # grad_lambda[:,5] = dlnAms_dalpha2 \
+    #                     + np.exp(Mag_norm[1]) * ((1/alpha2 + (Mms+10-m_mu)) * p_model[1] \
+    #                                             - 5/ln10 * dp_model_dn[1])/np.exp(log_p)
+    # itest=2
+    # log_p = np.log(p_model[itest]) + Mag_norm[itest]
+    # grad_lambda[:,4] = dlnAms_dalpha1 +\
+    #                 np.exp(Mag_norm[2]) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)) * p_model[2] \
+    #                                                         - 5/ln10 * dalphag_dalpha1 * dp_model_dn[2])/np.exp(log_p)
+    # grad_lambda[:,5] = dlnAms_dalpha2 \
+    #                     +  np.exp(Mag_norm[2]) * (dalphag_dalpha2*(Mms1+10-m_mu) * p_model[2] \
+    #                                                 - 5/ln10 * dalphag_dalpha2 * dp_model_dn[2])/np.exp(log_p)
+
+    # log_p = log_Ams
+    # grad_lambda[:,4] = dlnAms_dalpha1
+    # log_p = Mag_norm[itest]-log_Ams
+    # grad_lambda[:,4] = np.exp(Mag_norm[2]-log_Ams) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)))/np.exp(log_p)
+    # log_p = alphag
+    # grad_lambda[:,4] = dalphag_dalpha1
+    # grad_lambda[:,5] = dalphag_dalpha2
+    # log_p = Ams
+    # grad_lambda[:,4] = dAms_dalpha1
+    #
+    # log_p = np.log(np.sum(p_model*np.exp(Mag_norm-log_Ams)))
+    # grad_lambda[:,4] = (np.exp(Mag_norm[3]-log_Ams) * ((1/alpha1 + (Mms+10-m_mu)) * p_model[3] \
+    #                                             - 5/ln10 * dp_model_dn[3]) \
+    #                  + np.exp(Mag_norm[2]-log_Ams) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)) * p_model[2] \
+    #                                             - 5/ln10 * dalphag_dalpha1 * dp_model_dn[2]))/np.exp(log_p)
+    #log_lambda=log_p
+    return log_lambda, grad_lambda.T#np.exp(log_lambda)*grad_lambda.T
+
+@njit
+def halomodel_perr_integrand(p, beta, n, h, mu, err):
+    return p**n * (beta**2/p**2 + 1)**(-h/2) * np.exp(-(p-mu)**2/(2*err**2))
 @njit
 def halomodel_perr_grad(p, beta, n, h, mu, err):
     return -p**4 + mu*p**3 - (beta**2-n*err**2)*p**2 + mu*beta**2*p + (n+h)*err**2*beta**2
 @njit
 def halomodel_perr_logit_grad(p, args):
-    beta, n, h, mu, err, pmin, pmax = args
-    return p**5 - (pmax+mu)*p**4 \
-           + ((beta**2+mu*pmax) - (n+2)*err**2)*p**3 \
-           + ((n+1)*pmax*err**2 - beta**2*(mu+pmax))*p**2 \
-           + (mu*beta**2*pmax - (n+2+h)*beta**2*err**2)*p + ((h+n+1)*pmax)*beta**2*err**2
-@njit
-def halomodel_perr_logit_grad(p, args):
     beta, n, h, mu, err, a, b = args
     return p*(beta**2 + p**2) * (a+b-2*p) +\
           ((n - p*(p-mu)/err**2)*(beta**2+p**2) + h*beta**2) * (p-a)*(b-p)
-@njit
-def halomodel_perr_integrand(p, beta, n, h, mu, err):
-    return p**n * (beta**2/p**2 + 1)**(-h/2) * np.exp(-(p-mu)**2/(2*err**2))
-
+#@njit
+def halomodel_perr_logit_grad_test(p, args):
+    beta, n, h, mu, err, a, b = args
+    #print(p*(beta**2 + p**2))
+    #print(((n - p*(p-mu)/err**2)*(beta**2+p**2) + h*beta**2) * (p-a))
+    print(n, h)
+    return p*(beta**2 + p**2) * (a+b-2*p) +\
+          ((n - p*(p-mu)/err**2)*(beta**2+p**2) + h*beta**2) * (p-a)*(b-p)
 @njit
 def halomodel_perr_d2logIJ_dp2(p, beta, n, h, mu, err, transform='none', b=None, a=None):
     d2logI_dp2 = -(n+h)/p**2 + h*(p**2-beta**2)/(p**2+beta**2)**2 - 1/err**2
@@ -830,6 +1042,37 @@ def halomodel_perr_d2logIJ_dp2(p, beta, n, h, mu, err, transform='none', b=None,
     elif transform=='logit':    return d2logI_dp2 - 1/p**2 - 1/(p-b)**2
     elif transform=='logit_ab': return d2logI_dp2 - 1/(p-a)**2 - 1/(p-b)**2
 
+def halomodel_perr_integrand_dn(p, beta, n, h, mu, err):
+    return np.log(p) * p**n * (beta**2/p**2 + 1)**(-h/2) * np.exp(-(p-mu)**2/(2*err**2))
+@njit
+def halomodel_perr_logit_grad_dn(p, args):
+    beta, n, h, mu, err, a, b = args
+    return p*(beta**2 + p**2) * (a+b-2*p) +\
+          ((n + 1/np.log(p) - p*(p-mu)/err**2)*(beta**2+p**2) + h*beta**2) * (p-a)*(b-p)
+@njit
+def halomodel_perr_d2logIJ_dp2_dn(p, beta, n, h, mu, err, transform='none', b=None, a=None):
+    log_p = np.log(p)
+    d2logI_dp2 = -(log_p + 1)/(p**2 * log_p**2) -(n+h)/p**2 + h*(p**2-beta**2)/(p**2+beta**2)**2 - 1/err**2
+    if   transform=='none':     return d2logI_dp2
+    elif transform=='logit':    return d2logI_dp2 - 1/p**2 - 1/(p-b)**2
+    elif transform=='logit_ab': return d2logI_dp2 - 1/(p-a)**2 - 1/(p-b)**2
+
+def halomodel_perr_integrand_dh(p, beta, n, h, mu, err):
+    return -0.5*np.log(beta**2/p**2 + 1) * p**n * (beta**2/p**2 + 1)**(-h/2) * np.exp(-(p-mu)**2/(2*err**2))
+@njit
+def halomodel_perr_logit_grad_dh(p, args):
+    beta, n, h, mu, err, a, b = args
+    return p*(beta**2 + p**2) * (a+b-2*p) +\
+          ((n - p*(p-mu)/err**2)*(beta**2+p**2) - 2*beta**2/np.log(beta**2/p**2+1) + h*beta**2) * (p-a)*(b-p)
+
+@njit
+def halomodel_perr_d2logIJ_dp2_dh(p, beta, n, h, mu, err, transform='none', b=None, a=None):
+    log_r = np.log(beta**2/p**2+1)
+    d2logI_dp2 = (2*beta**2/log_r - (beta**2 + 3*p**2)) * 2*beta**2/( p**2*(beta**2+p**2)*log_r ) \
+                 -(n+h)/p**2 + h*(p**2-beta**2)/(p**2+beta**2)**2 - 1/err**2
+    if   transform=='none':     return d2logI_dp2
+    elif transform=='logit':    return d2logI_dp2 - 1/p**2 - 1/(p-b)**2
+    elif transform=='logit_ab': return d2logI_dp2 - 1/(p-a)**2 - 1/(p-b)**2
 
 #%% Integral of model over parameter space.
 def integral_model(params, bins=None, fid_pars=None, grad=False):
@@ -918,7 +1161,7 @@ class TestPoissonBinomial(unittest.TestCase):
     def test_halo_logit_grad_perr(self):
 
         test_args = (1,3,2.,0.5,0.1,0.,0.,1.)
-        beta, n, h, mu, err, pmax = test_args
+        beta, n, h, mu, err, a, b = test_args
         grad = lambda x: dh_msto.halomodel_perr_logit_grad(x, test_args) \
                        * dh_msto.halomodel_perr_integrand(x, *test_args[:-2])/(x*(beta**2+x**2))
         model = lambda x: (x-test_args[-2])*(test_args[-1]-x)*dh_msto.halomodel_perr_integrand(x, *test_args[:-2])
@@ -928,12 +1171,34 @@ class TestPoissonBinomial(unittest.TestCase):
 
         test_args = (0.11459087188687923, -1.9315154043531053, 62.460138858539736,
                      -0.6133993246056172,  1.002678948333817, 0.2, 0.5709469567273955)
-        beta, n, h, mu, err, pmax = test_args
+        beta, n, h, mu, err, a, b = test_args
         grad = lambda x: dh_msto.halomodel_perr_logit_grad(x, test_args) \
                        * dh_msto.halomodel_perr_integrand(x, *test_args[:-2])/(x*(beta**2+x**2))
         model = lambda x: (x-test_args[-2])*(test_args[-1]-x)*dh_msto.halomodel_perr_integrand(x, *test_args[:-2])
         self.assertAlmostEqual( grad(0.57), scipy.optimize.approx_fprime(np.array([0.57]), model, 1e-12), 8)
         self.assertAlmostEqual( grad(0.01), scipy.optimize.approx_fprime(np.array([0.01]), model, 1e-12), 8)
+
+        grad = lambda x: dh_msto.halomodel_perr_logit_grad_dn(x, test_args) \
+                       * dh_msto.halomodel_perr_integrand_dn(x, *test_args[:-2])/(x*(beta**2+x**2))
+        model = lambda x: (x-test_args[-2])*(test_args[-1]-x)*dh_msto.halomodel_perr_integrand_dn(x, *test_args[:-2])
+        self.assertAlmostEqual( grad(0.57), scipy.optimize.approx_fprime(np.array([0.57]), model, 1e-12), 8)
+        self.assertAlmostEqual( grad(0.01), scipy.optimize.approx_fprime(np.array([0.01]), model, 1e-12), 8)
+
+        grad = lambda x: dh_msto.halomodel_perr_logit_grad_dh(x, test_args) \
+                       * dh_msto.halomodel_perr_integrand_dh(x, *test_args[:-2])/(x*(beta**2+x**2))
+        model = lambda x: (x-test_args[-2])*(test_args[-1]-x)*dh_msto.halomodel_perr_integrand_dh(x, *test_args[:-2])
+        self.assertAlmostEqual( grad(0.57), scipy.optimize.approx_fprime(np.array([0.57]), model, 1e-12), 8)
+        self.assertAlmostEqual( grad(0.01), scipy.optimize.approx_fprime(np.array([0.01]), model, 1e-12), 8)
+
+        test_args = (1,3,2.,0.5,0.1,0.,0.,1.)
+        model = lambda h: dh_msto.halomodel_perr_integrand(0.1, *(1,3,h,0.5,0.1))
+        grad = lambda h: dh_msto.halomodel_perr_integrand_dh(0.1, *(1,3,h,0.5,0.1))
+        self.assertAlmostEqual( grad(0.1), scipy.optimize.approx_fprime(np.array([0.1]), model, 1e-12), 8)
+
+        test_args = (1,3,2.,0.5,0.1,0.,0.,1.)
+        model = lambda n: dh_msto.halomodel_perr_integrand(0.1, *(1,n,2.,0.5,0.1))
+        grad = lambda n: dh_msto.halomodel_perr_integrand_dn(0.1, *(1,n,2.,0.5,0.1))
+        self.assertAlmostEqual( grad(0.1), scipy.optimize.approx_fprime(np.array([0.1]), model, 1e-12), 8)
 
     def test_disk_logit_grad_perr(self):
 
