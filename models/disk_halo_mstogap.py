@@ -434,36 +434,7 @@ def log_expmodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., 
                         +  np.exp(Mag_norm[2]) * (dalphag_dalpha2*(Mms1+10-m_mu) * p_model[2] \
                                                     - 5/ln10 * dalphag_dalpha2 * dp_model_dn[2])))/exp_log_p
 
-
-    # grad_lambda[:,4] = dlnAms_dalpha1
-    # grad_lambda[:,5] = dlnAms_dalpha2
-    # return log_Ams, grad_lambda.T
-
-    # itest=3
-    # log_p = np.log(p_model[itest]) + Mag_norm[itest]-log_Ams
-    # grad_lambda[:,4] = np.exp(Mag_norm[itest]-log_Ams) * ((1/alpha1 + (Mms+10-m_mu)) * p_model[3] \
-    #                                              - 5/ln10 * dp_model_dn[3])/np.exp(log_p)
-    # itest=2
-    # log_p = np.log(p_model[itest]) + Mag_norm[itest]-log_Ams
-    # grad_lambda[:,4] = np.exp(Mag_norm[2]-log_Ams) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)) * p_model[2] \
-    #                                                         - 5/ln10 * dalphag_dalpha1 * dp_model_dn[2])/np.exp(log_p)
-    # grad_lambda[:,4] = np.exp(Mag_norm[2]-log_Ams) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)) * p_model[2] \
-    #                                                         - 5/ln10 * dalphag_dalpha1 * dp_model_dn[2])/np.exp(log_p)
-    # log_p = Mag_norm[itest]-log_Ams
-    # grad_lambda[:,4] = np.exp(Mag_norm[2]-log_Ams) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)))/np.exp(log_p)
-    # log_p = alphag
-    # grad_lambda[:,4] = dalphag_dalpha1
-    # grad_lambda[:,5] = dalphag_dalpha2
-    # log_p = Ams
-    # grad_lambda[:,4] = dAms_dalpha1
-    #
-    # log_p = np.log(np.sum(p_model*np.exp(Mag_norm-log_Ams)))
-    # grad_lambda[:,4] = (np.exp(Mag_norm[3]-log_Ams) * ((1/alpha1 + (Mms+10-m_mu)) * p_model[3] \
-    #                                             - 5/ln10 * dp_model_dn[3]) \
-    #                  + np.exp(Mag_norm[2]-log_Ams) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)) * p_model[2] \
-    #                                             - 5/ln10 * dalphag_dalpha1 * dp_model_dn[2]))/np.exp(log_p)
-
-    return log_lambda, grad_lambda.T#np.exp(log_lambda)*grad_lambda.T
+    return log_lambda, grad_lambda.T
 
 def logmodel_perr(sample, params, gmm=None, fid_pars=None, grad=False):
 
@@ -682,28 +653,19 @@ def log_expmodel_perr_jitted(p_model, beta, pi_mu, pi_err, m_mu, Mag_bounds, Mag
 
     return p_model
 
-#@njit
+def expmodel_integrand(p, beta, n, h, mu, err):
+    return p**n * np.exp(-beta/p)
+def expmodel_perr_integrand(p, beta, n, mu, err):
+    return p**n * np.exp(-beta/p - (p-mu)**2/(2*err**2))
+@njit
 def expmodel_perr_grad(p, args):
     beta, n, mu, err = args
     return p**3 - mu*p**2 - n*err**2*p - beta*err**2
-
-# @njit
-# def expmodel_perr_logit_grad(p, args):
-#     beta, n, mu, err, pmax = args
-#     return p**4 - (pmax+mu)*p**3 + (pmax*mu - (n+2)*err**2)*p**2 + ( ((n+1)*pmax-beta) * err**2 )*p + beta*pmax*err**2
 @njit
 def expmodel_perr_logit_grad(p, args):
     beta, n, mu, err, a, b = args
     return p**2 * (a+b-2*p) \
          + (n*p + beta - p**2*(p-mu)/err**2) * (p-a)*(b-p)
-#@njit
-def expmodel_perr_integrand(p, beta, n, mu, err):
-    #beta, n, h, mu, err = args
-    return p**n * np.exp(-beta/p - (p-mu)**2/(2*err**2))
-#@njit
-def expmodel_integrand(p, beta, n, h, mu, err):
-    #beta, n, h, mu, err = args
-    return p**n * np.exp(-beta/p)
 @njit
 def expmodel_perr_d2logIJ_dp2(p, beta, n, mu, err, transform='none', b=None, a=None):
     d2logI_dp2 = -n/p**2 - 2*beta/p**3 - 1/err**2
@@ -711,6 +673,8 @@ def expmodel_perr_d2logIJ_dp2(p, beta, n, mu, err, transform='none', b=None, a=N
     elif transform=='logit':    return d2logI_dp2 - 1/p**2 - 1/(p-b)**2
     elif transform=='logit_ab': return d2logI_dp2 - 1/(p-a)**2 - 1/(p-b)**2
 
+def expmodel_perr_integrand_dn(p, beta, n, mu, err):
+    return np.log(p) * p**n * np.exp(-beta/p - (p-mu)**2/(2*err**2))
 @njit
 def expmodel_perr_logit_grad_dn(p, args):
     beta, n, mu, err, a, b = args
@@ -723,10 +687,7 @@ def expmodel_perr_d2logIJ_dp2_dn(p, beta, n, mu, err, transform='none', b=None, 
     if   transform=='none':     return d2logI_dp2
     elif transform=='logit':    return d2logI_dp2 - 1/p**2 - 1/(p-b)**2
     elif transform=='logit_ab': return d2logI_dp2 - 1/(p-a)**2 - 1/(p-b)**2
-#@njit
-def expmodel_perr_integrand_dn(p, beta, n, mu, err):
-    #beta, n, h, mu, err = args
-    return np.log(p) * p**n * np.exp(-beta/p - (p-mu)**2/(2*err**2))
+
 
 def log_halomodel_perr(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
                                 Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, degree=21):
@@ -949,72 +910,8 @@ def log_halomodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1.,
                                                 - 5/ln10 * dp_model_dn[1]) \
                         +  np.exp(Mag_norm[2]) * (dalphag_dalpha2*(Mms1+10-m_mu) * p_model[2] \
                                                     - 5/ln10 * dalphag_dalpha2 * dp_model_dn[2])))/exp_log_p
-    #itest=0
-    #log_p = p_model[itest];
-    #grad_lambda[:,0] = dp_model_dhz[itest]
-    #grad_lambda[:,0] = np.sum(dp_model_dhz*np.exp(Mag_norm), axis=0)/exp_log_p
-    # grad_lambda[:,1] = -5/ln10 * dp_model_dn[itest]
-    # grad_lambda[:,4] = -5/ln10 * dp_model_dn[itest]
-    # grad_lambda[:,5] = -5/ln10 * dp_model_dn[itest]
 
-    # grad_lambda[:,4] = dlnAms_dalpha1
-    # grad_lambda[:,5] = dlnAms_dalpha2
-    # return log_Ams, grad_lambda.T
-
-    # log_p = np.log(p_model[0]*np.exp(Mag_norm[0]) + p_model[2]*np.exp(Mag_norm[2]) + p_model[3]*np.exp(Mag_norm[3]) + p_model[1]*np.exp(Mag_norm[1]))
-    # log_p = np.log(p_model[0]) + Mag_norm[0]
-    # log_p = scipy.special.logsumexp(Mag_norm[1:], b=p_model[1:], axis=0)
-    # # grad_lambda[:,4] = dlnAms_dalpha1 \
-    # #                     + (np.exp(Mag_norm[3]) * ((1/alpha1 + (Mms+10-m_mu)) * p_model[3] \
-    # #                                             - 5/ln10 * dp_model_dn[3]) \
-    # #                     +  np.exp(Mag_norm[2]) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)) * p_model[2] \
-    # #                                             - 5/ln10 * dalphag_dalpha1 * dp_model_dn[2]))/np.exp(log_p)
-    # # grad_lambda[:,4] = (dlnAms_dalpha1 * np.sum(p_model[1:]*np.exp(Mag_norm[1:])) \
-    # #                     + (np.exp(Mag_norm[3]) * ((1/alpha1 + (Mms+10-m_mu)) * p_model[3] \
-    # #                                             - 5/ln10 * dp_model_dn[3]) \
-    # #                     +  np.exp(Mag_norm[2]) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)) * p_model[2] \
-    # #                                             - 5/ln10 * dalphag_dalpha1 * dp_model_dn[2])))*1/np.exp(log_p)
-    # grad_lambda[:,5] = (dlnAms_dalpha2 * np.sum(p_model[1:]*np.exp(Mag_norm[1:])) \
-    #                     + (np.exp(Mag_norm[1]) * ((1/alpha2 + (Mms+10-m_mu)) * p_model[1] \
-    #                                             - 5/ln10 * dp_model_dn[1]) \
-    #                     +  np.exp(Mag_norm[2]) * (dalphag_dalpha2*(Mms1+10-m_mu) * p_model[2] \
-    #                                                 - 5/ln10 * dalphag_dalpha2 * dp_model_dn[2])))/np.exp(log_p)
-    # itest=3
-    # log_p = np.log(p_model[itest]) + Mag_norm[itest]
-    # grad_lambda[:,4] = dlnAms_dalpha1 +\
-    #                     np.exp(Mag_norm[itest]) * ((1/alpha1 + (Mms+10-m_mu)) * p_model[3] \
-    #                                              - 5/ln10 * dp_model_dn[3])/np.exp(log_p)
-    # itest=1
-    # log_p = np.log(p_model[itest]) + Mag_norm[itest]
-    # grad_lambda[:,5] = dlnAms_dalpha2 \
-    #                     + np.exp(Mag_norm[1]) * ((1/alpha2 + (Mms+10-m_mu)) * p_model[1] \
-    #                                             - 5/ln10 * dp_model_dn[1])/np.exp(log_p)
-    # itest=2
-    # log_p = np.log(p_model[itest]) + Mag_norm[itest]
-    # grad_lambda[:,4] = dlnAms_dalpha1 +\
-    #                 np.exp(Mag_norm[2]) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)) * p_model[2] \
-    #                                                         - 5/ln10 * dalphag_dalpha1 * dp_model_dn[2])/np.exp(log_p)
-    # grad_lambda[:,5] = dlnAms_dalpha2 \
-    #                     +  np.exp(Mag_norm[2]) * (dalphag_dalpha2*(Mms1+10-m_mu) * p_model[2] \
-    #                                                 - 5/ln10 * dalphag_dalpha2 * dp_model_dn[2])/np.exp(log_p)
-
-    # log_p = log_Ams
-    # grad_lambda[:,4] = dlnAms_dalpha1
-    # log_p = Mag_norm[itest]-log_Ams
-    # grad_lambda[:,4] = np.exp(Mag_norm[2]-log_Ams) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)))/np.exp(log_p)
-    # log_p = alphag
-    # grad_lambda[:,4] = dalphag_dalpha1
-    # grad_lambda[:,5] = dalphag_dalpha2
-    # log_p = Ams
-    # grad_lambda[:,4] = dAms_dalpha1
-    #
-    # log_p = np.log(np.sum(p_model*np.exp(Mag_norm-log_Ams)))
-    # grad_lambda[:,4] = (np.exp(Mag_norm[3]-log_Ams) * ((1/alpha1 + (Mms+10-m_mu)) * p_model[3] \
-    #                                             - 5/ln10 * dp_model_dn[3]) \
-    #                  + np.exp(Mag_norm[2]-log_Ams) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)) * p_model[2] \
-    #                                             - 5/ln10 * dalphag_dalpha1 * dp_model_dn[2]))/np.exp(log_p)
-    #log_lambda=log_p
-    return log_lambda, grad_lambda.T#np.exp(log_lambda)*grad_lambda.T
+    return log_lambda, grad_lambda.T
 
 @njit
 def halomodel_perr_integrand(p, beta, n, h, mu, err):
@@ -1025,14 +922,6 @@ def halomodel_perr_grad(p, beta, n, h, mu, err):
 @njit
 def halomodel_perr_logit_grad(p, args):
     beta, n, h, mu, err, a, b = args
-    return p*(beta**2 + p**2) * (a+b-2*p) +\
-          ((n - p*(p-mu)/err**2)*(beta**2+p**2) + h*beta**2) * (p-a)*(b-p)
-#@njit
-def halomodel_perr_logit_grad_test(p, args):
-    beta, n, h, mu, err, a, b = args
-    #print(p*(beta**2 + p**2))
-    #print(((n - p*(p-mu)/err**2)*(beta**2+p**2) + h*beta**2) * (p-a))
-    print(n, h)
     return p*(beta**2 + p**2) * (a+b-2*p) +\
           ((n - p*(p-mu)/err**2)*(beta**2+p**2) + h*beta**2) * (p-a)*(b-p)
 @njit
