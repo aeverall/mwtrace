@@ -15,6 +15,8 @@ import numpy as np, scipy, healpy as hp
 from numba import njit
 from copy import deepcopy as copy
 
+ln10 = np.log(10)
+
 
 def logmodel_grad(sample, params, gmm=None, fid_pars=None, grad=False):
 
@@ -29,7 +31,7 @@ def logmodel_grad(sample, params, gmm=None, fid_pars=None, grad=False):
     theta=fid_pars['lat_min']; Mx=fid_pars['Mmax']; R0=fid_pars['R0']
 
     # Absmag
-    M = m_mu - 10 + 5*log_pi_mu/np.log(10)
+    M = m_mu - 10 + 5*log_pi_mu/ln10
 
     logcmpts = np.zeros((len(pi_mu), ncomponents))
     if grad: grad_lambda = np.zeros((7, len(pi_mu), ncomponents))
@@ -79,16 +81,16 @@ def log_expmodel_grad(pi_mu, abs_sin_lat, m_mu, M, log_pi_mu, hz=1., alpha1=-1.,
                                 Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, grad=False):
 
     ep1=1.3; ep2=2.3;
-    a1=-np.log(10)*(ep1-1)/(2.5*alpha1); a2=-np.log(10)*(ep2-1)/(2.5*alpha2);
+    a1=-ln10*(ep1-1)/(2.5*alpha1); a2=-ln10*(ep2-1)/(2.5*alpha2);
 
     alphag = (np.log(a1/a2) - alpha1*(Mms-Mms1) + alpha2*(Mms-Mms2))/(Mms1-Mms2)
     Ag = 1/a1 * np.exp((alpha1-alphag)*(Mms-Mms1))
 
     # Latent variables
-    n1 = -(4 + alpha1*5/np.log(10))
-    ng = -(4 + alphag*5/np.log(10))
-    n2 = -(4 + alpha2*5/np.log(10))
-    n3 = -(4 + alpha3*5/np.log(10))
+    n1 = -(4 + alpha1*5/ln10)
+    ng = -(4 + alphag*5/ln10)
+    n2 = -(4 + alpha2*5/ln10)
+    n3 = -(4 + alpha3*5/ln10)
 
     pop1 = M>Mms1
     popg = M>Mms2
@@ -124,7 +126,7 @@ def log_expmodel_grad(pi_mu, abs_sin_lat, m_mu, M, log_pi_mu, hz=1., alpha1=-1.,
     # Mto
     grad_lambda[:,3] = np.where(pop2, 1/(np.exp(np.log( fD*a1*a2 ) - log_Ams)) * (-a1*alpha2/a2 * np.exp(alpha2*(Mms-Mto))), alpha3)
     # alpha3
-    grad_lambda[:,1] = np.where(pop2, 0, 1/alpha3 + Mto+10-m_mu - 5*log_pi_mu/np.log(10))
+    grad_lambda[:,1] = np.where(pop2, 0, 1/alpha3 + Mto+10-m_mu - 5*log_pi_mu/ln10)
 
     b_alpha1 = np.array([a2/alpha1 * ((Mms-Mms1)-1/alpha1),
                         -a2/alpha1 * ((Mms-Mx)  -1/alpha1),
@@ -140,15 +142,15 @@ def log_expmodel_grad(pi_mu, abs_sin_lat, m_mu, M, log_pi_mu, hz=1., alpha1=-1.,
                         -a1/alpha2 * ((Mms-Mms2)- 1/alpha2)])
     # alpha1
     dlnAms_dalpha1 = -1/alpha1 - np.sum(b_alpha1*np.exp(exponent))/np.sum(b*np.exp(exponent))
-    grad_lambda[:,4] = np.where(pop1, dlnAms_dalpha1+1/alpha1+(Mms+10-m_mu) - 5/np.log(10)*log_pi_mu,
-                       np.where(popg, dlnAms_dalpha1+(1/alpha1 + (Mms-Mms1))*(Mms-Mms2)/(Mms1-Mms2) - (1/alpha1 + (Mms-Mms1))/(Mms1-Mms2) * (Mms+10-m_mu - 5/np.log(10)*log_pi_mu),
+    grad_lambda[:,4] = np.where(pop1, dlnAms_dalpha1+1/alpha1+(Mms+10-m_mu) - 5/ln10*log_pi_mu,
+                       np.where(popg, dlnAms_dalpha1+(1/alpha1 + (Mms-Mms1))*(Mms-Mms2)/(Mms1-Mms2) - (1/alpha1 + (Mms-Mms1))/(Mms1-Mms2) * (Mms+10-m_mu - 5/ln10*log_pi_mu),
                        np.where(pop2, dlnAms_dalpha1, 0)))
 
     # alpha2
     dlnAms_dalpha2 = -1/alpha2 - np.sum(b_alpha2*np.exp(exponent))/np.sum(b*np.exp(exponent))
     grad_lambda[:,5] = np.where(pop1, dlnAms_dalpha2,
-                       np.where(popg, dlnAms_dalpha2-(1/alpha2 + (Mms-Mms2))*(Mms-Mms1)/(Mms1-Mms2) + (1/alpha2 + (Mms-Mms2))/(Mms1-Mms2) * (Mms+10-m_mu - 5/np.log(10)*log_pi_mu),
-                       np.where(pop2, dlnAms_dalpha2+1/alpha2+(Mms+10-m_mu) - 5/np.log(10)*log_pi_mu, 0)))
+                       np.where(popg, dlnAms_dalpha2-(1/alpha2 + (Mms-Mms2))*(Mms-Mms1)/(Mms1-Mms2) + (1/alpha2 + (Mms-Mms2))/(Mms1-Mms2) * (Mms+10-m_mu - 5/ln10*log_pi_mu),
+                       np.where(pop2, dlnAms_dalpha2+1/alpha2+(Mms+10-m_mu) - 5/ln10*log_pi_mu, 0)))
 
     return log_lambda, grad_lambda.T#np.exp(log_lambda)*grad_lambda.T
 
@@ -156,16 +158,16 @@ def log_halomodel_grad(pi_mu, abs_sin_lat, m_mu, M, log_pi_mu, hz=1., alpha1=-1.
                                 Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, grad=False):
 
     ep1=1.3; ep2=2.3;
-    a1=-np.log(10)*(ep1-1)/(2.5*alpha1); a2=-np.log(10)*(ep2-1)/(2.5*alpha2);
+    a1=-ln10*(ep1-1)/(2.5*alpha1); a2=-ln10*(ep2-1)/(2.5*alpha2);
 
     alphag = (np.log(a1/a2) - alpha1*(Mms-Mms1) + alpha2*(Mms-Mms2))/(Mms1-Mms2)
     Ag = 1/a1 * np.exp((alpha1-alphag)*(Mms-Mms1))
 
     # Latent variables
-    n1 = -(4 + alpha1*5/np.log(10))
-    ng = -(4 + alphag*5/np.log(10))
-    n2 = -(4 + alpha2*5/np.log(10))
-    n3 = -(4 + alpha3*5/np.log(10))
+    n1 = -(4 + alpha1*5/ln10)
+    ng = -(4 + alphag*5/ln10)
+    n2 = -(4 + alpha2*5/ln10)
+    n3 = -(4 + alpha3*5/ln10)
 
     pop1 = M>Mms1
     popg = M>Mms2
@@ -198,7 +200,7 @@ def log_halomodel_grad(pi_mu, abs_sin_lat, m_mu, M, log_pi_mu, hz=1., alpha1=-1.
     # hz
     grad_lambda[:,0] = scipy.special.digamma(hz/2)/2 - scipy.special.digamma((hz-3)/2)/2 - 1/2 * np.log((abs_sin_lat**2)/(pi_mu**2 * R0**2) + 1)
     # alpha3
-    grad_lambda[:,1] = np.where(pop2, 0, 1/alpha3 + Mto+10-m_mu - 5*log_pi_mu/np.log(10))
+    grad_lambda[:,1] = np.where(pop2, 0, 1/alpha3 + Mto+10-m_mu - 5*log_pi_mu/ln10)
     # fD
     grad_lambda[:,2] = np.where(pop2, 1/fD, -1/(1-fD))
     # Mto
@@ -218,15 +220,248 @@ def log_halomodel_grad(pi_mu, abs_sin_lat, m_mu, M, log_pi_mu, hz=1., alpha1=-1.
                         -a1/alpha2 * ((Mms-Mms2)- 1/alpha2)])
     # alpha1
     dlnAms_dalpha1 = -1/alpha1 - np.sum(b_alpha1*np.exp(exponent))/np.sum(b*np.exp(exponent))
-    grad_lambda[:,4] = np.where(pop1, dlnAms_dalpha1+1/alpha1+(Mms+10-m_mu) - 5/np.log(10)*log_pi_mu,
-                       np.where(popg, dlnAms_dalpha1+(1/alpha1 + (Mms-Mms1))*(Mms-Mms2)/(Mms1-Mms2) - (1/alpha1 + (Mms-Mms1))/(Mms1-Mms2) * (Mms+10-m_mu - 5/np.log(10)*log_pi_mu),
+    grad_lambda[:,4] = np.where(pop1, dlnAms_dalpha1+1/alpha1+(Mms+10-m_mu) - 5/ln10*log_pi_mu,
+                       np.where(popg, dlnAms_dalpha1+(1/alpha1 + (Mms-Mms1))*(Mms-Mms2)/(Mms1-Mms2) - (1/alpha1 + (Mms-Mms1))/(Mms1-Mms2) * (Mms+10-m_mu - 5/ln10*log_pi_mu),
                        np.where(pop2, dlnAms_dalpha1, 0)))
 
     # alpha2
     dlnAms_dalpha2 = -1/alpha2 - np.sum(b_alpha2*np.exp(exponent))/np.sum(b*np.exp(exponent))
     grad_lambda[:,5] = np.where(pop1, dlnAms_dalpha2,
-                       np.where(popg, dlnAms_dalpha2-(1/alpha2 + (Mms-Mms2))*(Mms-Mms1)/(Mms1-Mms2) + (1/alpha2 + (Mms-Mms2))/(Mms1-Mms2) * (Mms+10-m_mu - 5/np.log(10)*log_pi_mu),
-                       np.where(pop2, dlnAms_dalpha2+1/alpha2+(Mms+10-m_mu) - 5/np.log(10)*log_pi_mu, 0)))
+                       np.where(popg, dlnAms_dalpha2-(1/alpha2 + (Mms-Mms2))*(Mms-Mms1)/(Mms1-Mms2) + (1/alpha2 + (Mms-Mms2))/(Mms1-Mms2) * (Mms+10-m_mu - 5/ln10*log_pi_mu),
+                       np.where(pop2, dlnAms_dalpha2+1/alpha2+(Mms+10-m_mu) - 5/ln10*log_pi_mu, 0)))
+
+    return log_lambda, grad_lambda.T#np.exp(log_lambda)*grad_lambda.T
+
+
+def logmodel_perr_grad(sample, params, gmm=None, fid_pars=None, grad=False):
+
+    # Observables
+    pi_mu, pi_err, abs_sin_lat, log_cos_lat, m_mu, log_pi_err = sample
+
+    # Input Parameters
+    ncomponents=fid_pars['ncomponents']
+    transformed_params = combined_params(params, fid_pars, ncomponents=ncomponents)
+
+    # Defined paramers
+    theta=fid_pars['lat_min']; Mx=fid_pars['Mmax']; R0=fid_pars['R0']
+
+    logcmpts = np.zeros((len(pi_mu), ncomponents))
+    weights = np.zeros(ncomponents)
+    for j in range(ncomponents):
+        logcmpts[:,j] = fid_pars['models'][j](pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err,
+                                                hz=transformed_params[j]['hz'],
+                                                alpha1=transformed_params[j]['alpha1'],
+                                                alpha2=transformed_params[j]['alpha2'],
+                                                alpha3=transformed_params[j]['alpha3'],
+                                                fD=transformed_params[j]['fD'],
+                                                Mms=transformed_params[j]['Mms'],
+                                                Mms1=transformed_params[j]['Mms1'],
+                                                Mms2=transformed_params[j]['Mms2'],
+                                                Mto=transformed_params[j]['Mto'],
+                                                Mx=Mx, R0=R0)
+
+        weights[j] = transformed_params[j]['w']
+
+    logsumexp = scipy.special.logsumexp(logcmpts, b=weights, axis=1) + log_cos_lat
+
+    if not grad: return 2*np.log(np.tan(theta)) + logsumexp
+    if not grad: return logsumexp + 2*np.log(np.tan(theta)) + log_cos_lat
+
+    grad_model = np.zeros((len(params), len(pi_mu)))
+    params_i = 0
+    for j in range(ncomponents):
+        reweight = (weights * np.exp(logcmpts)).T/np.exp(logsumexp)
+        for par in fid_pars['free_pars'][j]:
+            if par=='hz': grad_model[params_i] = grad_lambda[0,:,j].copy()*reweight[j]
+            if par=='alpha3': grad_model[params_i] = grad_lambda[1,:,j].copy()*reweight[j]
+            if par=='fD': grad_model[params_i] = grad_lambda[2,:,j].copy()*reweight[j]
+            if par=='Mto': grad_model[params_i] = grad_lambda[3,:,j].copy()*reweight[j]
+            if par=='w': grad_model[params_i] = np.exp(logcmpts[:,j])/np.exp(logsumexp)
+            params_i+=1
+    for par in fid_pars['free_pars']['shd']:
+        if par=='alpha1': grad_model[params_i] = np.sum(grad_lambda[4,:,:] * weights * np.exp(logcmpts), axis=1)/np.exp(logsumexp)
+        if par=='alpha2': grad_model[params_i] = np.sum(grad_lambda[5,:,:] * weights * np.exp(logcmpts), axis=1)/np.exp(logsumexp)
+        params_i+=1
+
+    jacobian = jacobian_params(params, fid_pars, ncomponents=ncomponents)
+
+    return logsumexp, (grad_model.T*jacobian).T# + 2*np.log(np.tan(theta)) + log_cos_lat, grad_model
+
+def log_expmodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
+                                Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, degree=21, grad=False):
+
+    ep1=1.3; ep2=2.3;
+    a1=-ln10*(ep1-1)/(2.5*alpha1); a2=-ln10*(ep2-1)/(2.5*alpha2);
+
+    alphag = (np.log(a1/a2) - alpha1*(Mms-Mms1) + alpha2*(Mms-Mms2))/(Mms1-Mms2)
+    Ag = 1/a1 * np.exp((alpha1-alphag)*(Mms-Mms1))
+
+    beta = abs_sin_lat/hz
+
+    # Latent variables
+    n1 = -(4 + alpha1*5/ln10)
+    ng = -(4 + alphag*5/ln10)
+    n2 = -(4 + alpha2*5/ln10)
+    n3 = -(4 + alpha3*5/ln10)
+
+    Ams_exponent = np.array([alpha1*(Mms-Mms1), alpha1*(Mms-Mx),
+                        alpha1*(Mms-Mms1)+alphag*(Mms1-Mms2), alpha1*(Mms-Mms1),
+                        alpha2*(Mms-Mto), alpha2*(Mms-Mms2)])
+    Ams_coeff = np.array([a2/alpha1, -a2/alpha1, a2/alphag, -a2/alphag, a1/alpha2, -a1/alpha2])
+    log_Ams = np.log( fD*a1*a2 ) - scipy.special.logsumexp(Ams_exponent,b=Ams_coeff)
+    log_AG = np.log(-alpha3) + np.log(1-fD)
+
+    log_pnorm = -3*np.log(hz)
+
+    # Absolute magnitude not known
+    Mag_bounds = [-np.inf, Mto, Mms2, Mms1, Mx]
+    Mag_n =      [n3,  n2,   ng,   n1]
+    Mag_norm =   [log_AG  + alpha3*(Mto+10-m_mu),
+                  log_Ams - np.log(a2) + alpha2*(Mms+10-m_mu),
+                  log_Ams + np.log(Ag) + alphag*(Mms+10-m_mu),
+                  log_Ams - np.log(a1) + alpha1*(Mms+10-m_mu)]
+
+    p_model = np.zeros((4, len(pi_mu)))
+    for ii in range(4):
+
+        p_integral = np.zeros(len(pi_mu))
+
+        p_min = np.exp((Mag_bounds[ii  ]+10-m_mu)*ln10/5)
+        p_max = np.exp((Mag_bounds[ii+1]+10-m_mu)*ln10/5)
+
+        n = Mag_n[ii]
+        args = (abs_sin_lat/hz, n*np.ones(len(pi_mu)), pi_mu, pi_err)
+        grad_min = expmodel_perr_grad(p_min, args)
+        grad_max = expmodel_perr_grad(p_max, args)
+        legendre = grad_min*grad_max>0
+        legendre[:] = False
+
+        # Gauss - Legendre Quadrature
+        a = p_min[legendre][:,np.newaxis]; b = p_max[legendre][:,np.newaxis]
+        args = (beta[legendre], n*np.ones(len(pi_mu[legendre])), pi_mu[legendre], pi_err[legendre])
+        leg_nodes, leg_weights = np.polynomial.legendre.leggauss(degree)
+        leg_nodes = leg_nodes[np.newaxis,:] * (b-a)/2 + (b+a)/2
+        p_integral[legendre] = np.sum(expmodel_perr_integrand(leg_nodes.T, *args), axis=0)
+
+        # Gauss - Hermite Quadrature
+        a = p_min[~legendre]; b = p_max[~legendre]
+
+        args = (beta[~legendre], n*np.ones(len(pi_mu[~legendre])), pi_mu[~legendre], pi_err[~legendre], a, b)
+        p_mode = functions.get_fooroots_ridder_hm(expmodel_perr_logit_grad, a=a+1e-15, b=b, args=args)
+
+        curve = expmodel_perr_d2logIJ_dp2(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
+                                    functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
+        z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
+
+        sigma = 1/np.sqrt(-curve)
+        p_integral[~legendre] = functions.integrate_gh_gap(expmodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=degree)
+
+        p_model[ii] = p_integral
+
+    log_p = scipy.special.logsumexp(Mag_norm, b=p_model, axis=0)
+    log_lambda = log_pnorm + log_p - 0.5*np.log(2*np.pi) - log_pi_err
+    if not grad: return log_lambda
+
+    exp_log_p = np.exp(log_p)
+
+    grad_lambda = np.zeros((pi_mu.shape[0], 6)) + np.nan
+    # hz
+    dp_model_dhz = np.zeros((4, len(pi_mu)))
+    for ii in range(4): # Run integration with n -> n-1
+        p_integral = np.zeros(len(pi_mu))
+        a = np.exp((Mag_bounds[ii  ]+10-m_mu)*ln10/5)
+        b = np.exp((Mag_bounds[ii+1]+10-m_mu)*ln10/5)
+        n = Mag_n[ii]-1
+        # Gauss - Hermite Quadrature
+        args = (beta, n*np.ones(len(pi_mu)), pi_mu, pi_err, a, b)
+        p_mode = functions.get_fooroots_ridder_hm(expmodel_perr_logit_grad, a=a+1e-15, b=b, args=args)
+        curve = expmodel_perr_d2logIJ_dp2(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
+                                    functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
+        z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
+        sigma = 1/np.sqrt(-curve)
+        p_integral = functions.integrate_gh_gap(expmodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=degree)
+        dp_model_dhz[ii] = p_integral
+    grad_lambda[:,0] = -3/hz + abs_sin_lat/hz**2 * np.sum(dp_model_dhz*np.exp(Mag_norm), axis=0)/exp_log_p
+    # n
+    dp_model_dn = np.zeros((4, len(pi_mu)))
+    for ii in range(4): # Run integration with log(p)p^n
+        p_integral = np.zeros(len(pi_mu))
+        a = np.exp((Mag_bounds[ii  ]+10-m_mu)*ln10/5)
+        b = np.exp((Mag_bounds[ii+1]+10-m_mu)*ln10/5)
+        n = Mag_n[ii]
+        # Gauss - Hermite Quadrature
+        args = (beta, n*np.ones(len(pi_mu)), pi_mu, pi_err, a, b)
+        p_mode = functions.get_fooroots_ridder_hm(expmodel_perr_logit_grad_dn, a=a+1e-15, b=b, args=args)
+        curve = expmodel_perr_d2logIJ_dp2_dn(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
+                                    functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
+        z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
+        sigma = 1/np.sqrt(-curve)
+        p_integral = functions.integrate_gh_gap(expmodel_perr_integrand_dn, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=degree)
+        dp_model_dn[ii] = p_integral
+    # alpha3
+    grad_lambda[:,1] = np.exp(Mag_norm[0])*((1/alpha3 + Mto+10-m_mu)*p_model[0] - 5/ln10*dp_model_dn[0])/exp_log_p
+    # fD
+    grad_lambda[:,2] = ( p_model[0]*np.exp(Mag_norm[0])/(fD-1) + np.sum(p_model[1:]*np.exp(Mag_norm[1:]), axis=0)/fD )/exp_log_p
+
+    # alpha 1/2
+    b_alpha1 = np.array([a2/alpha1 * ((Mms-Mms1)-1/alpha1),
+                        -a2/alpha1 * ((Mms-Mx)  -1/alpha1),
+                        a2/alphag * (-1/alpha1 + 1/alphag * ( 1/alpha1 + (Mms-Mms1))/(Mms1-Mms2)),
+                       -a2/alphag * ((Mms-Mms1)+ 1/alphag * ( 1/alpha1 + (Mms-Mms1))/(Mms1-Mms2)),
+                       -a1/(alpha1*alpha2),
+                        a1/(alpha1*alpha2)])
+    b_alpha2 = np.array([-a2/(alpha1*alpha2),
+                         a2/(alpha1*alpha2),
+                         a2/alphag * ((Mms-Mms2)- 1/alphag * ( 1/alpha2 + (Mms-Mms2))/(Mms1-Mms2)),
+                         a2/alphag * ( 1/alpha2 + 1/alphag * ( 1/alpha2 + (Mms-Mms2))/(Mms1-Mms2)),
+                         a1/alpha2 * ((Mms-Mto) - 1/alpha2),
+                        -a1/alpha2 * ((Mms-Mms2)- 1/alpha2)])
+    Ams = np.exp(log_Ams)
+    # alpha1
+    dalphag_dalpha1 = (-1/alpha1 - (Mms-Mms1))/(Mms1-Mms2)
+    dlnAms_dalpha1 = -1/alpha1 - np.sum(b_alpha1*np.exp(Ams_exponent))*Ams/(fD*a1*a2)
+    grad_lambda[:,4] = dlnAms_dalpha1 \
+                        + (np.exp(Mag_norm[3]) * ((1/alpha1 + (Mms+10-m_mu)) * p_model[3] \
+                                                - 5/ln10 * dp_model_dn[3]) \
+                        +  np.exp(Mag_norm[2]) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)) * p_model[2] \
+                                                - 5/ln10 * dalphag_dalpha1 * dp_model_dn[2]))/exp_log_p
+    # alpha2
+    dalphag_dalpha2 = (1/alpha2 + (Mms-Mms2))/(Mms1-Mms2)
+    dlnAms_dalpha2 = -1/alpha2 - np.sum(b_alpha2*np.exp(Ams_exponent))*Ams/(fD*a1*a2)
+    grad_lambda[:,5] = dlnAms_dalpha2 \
+                        + (np.exp(Mag_norm[1]) * ((1/alpha2 + (Mms+10-m_mu)) * p_model[1] \
+                                                   - 5/ln10 * dp_model_dn[1]) \
+                        +  np.exp(Mag_norm[2]) * (dalphag_dalpha2*(Mms1+10-m_mu) * p_model[2] \
+                                                    - 5/ln10 * dalphag_dalpha2 * dp_model_dn[2]))/exp_log_p
+
+
+    # grad_lambda[:,4] = dlnAms_dalpha1
+    # grad_lambda[:,5] = dlnAms_dalpha2
+    # return log_Ams, grad_lambda.T
+
+    # itest=3
+    # log_p = np.log(p_model[itest]) + Mag_norm[itest]-log_Ams
+    # grad_lambda[:,4] = np.exp(Mag_norm[itest]-log_Ams) * ((1/alpha1 + (Mms+10-m_mu)) * p_model[3] \
+    #                                              - 5/ln10 * dp_model_dn[3])/np.exp(log_p)
+    # itest=2
+    # log_p = np.log(p_model[itest]) + Mag_norm[itest]-log_Ams
+    # grad_lambda[:,4] = np.exp(Mag_norm[2]-log_Ams) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)) * p_model[2] \
+    #                                                         - 5/ln10 * dalphag_dalpha1 * dp_model_dn[2])/np.exp(log_p)
+    # grad_lambda[:,4] = np.exp(Mag_norm[2]-log_Ams) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)) * p_model[2] \
+    #                                                         - 5/ln10 * dalphag_dalpha1 * dp_model_dn[2])/np.exp(log_p)
+    # log_p = Mag_norm[itest]-log_Ams
+    # grad_lambda[:,4] = np.exp(Mag_norm[2]-log_Ams) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)))/np.exp(log_p)
+    # log_p = alphag
+    # grad_lambda[:,4] = dalphag_dalpha1
+    # grad_lambda[:,5] = dalphag_dalpha2
+    # log_p = Ams
+    # grad_lambda[:,4] = dAms_dalpha1
+    #
+    # log_p = np.log(np.sum(p_model*np.exp(Mag_norm-log_Ams)))
+    # grad_lambda[:,4] = (np.exp(Mag_norm[3]-log_Ams) * ((1/alpha1 + (Mms+10-m_mu)) * p_model[3] \
+    #                                             - 5/ln10 * dp_model_dn[3]) \
+    #                  + np.exp(Mag_norm[2]-log_Ams) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)) * p_model[2] \
+    #                                             - 5/ln10 * dalphag_dalpha1 * dp_model_dn[2]))/np.exp(log_p)
 
     return log_lambda, grad_lambda.T#np.exp(log_lambda)*grad_lambda.T
 
@@ -267,7 +502,7 @@ def log_expmodel_perr(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alpha
                                 Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, degree=21):
 
     ep1=1.3; ep2=2.3;
-    a1=-np.log(10)*(ep1-1)/(2.5*alpha1); a2=-np.log(10)*(ep2-1)/(2.5*alpha2);
+    a1=-ln10*(ep1-1)/(2.5*alpha1); a2=-ln10*(ep2-1)/(2.5*alpha2);
 
     alphag = (np.log(a1/a2) - alpha1*(Mms-Mms1) + alpha2*(Mms-Mms2))/(Mms1-Mms2)
     Ag = 1/a1 * np.exp((alpha1-alphag)*(Mms-Mms1))
@@ -275,10 +510,10 @@ def log_expmodel_perr(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alpha
     beta = abs_sin_lat/hz
 
     # Latent variables
-    n1 = -(4 + alpha1*5/np.log(10))
-    ng = -(4 + alphag*5/np.log(10))
-    n2 = -(4 + alpha2*5/np.log(10))
-    n3 = -(4 + alpha3*5/np.log(10))
+    n1 = -(4 + alpha1*5/ln10)
+    ng = -(4 + alphag*5/ln10)
+    n2 = -(4 + alpha2*5/ln10)
+    n3 = -(4 + alpha3*5/ln10)
 
     log_Ams = np.log( fD*a1*a2 ) - \
               scipy.special.logsumexp(np.array([alpha1*(Mms-Mms1), alpha1*(Mms-Mx),
@@ -304,8 +539,8 @@ def log_expmodel_perr(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alpha
 
         p_integral = np.zeros(len(pi_mu))
 
-        p_min = np.exp((Mag_bounds[ii  ]+10-m_mu)*np.log(10)/5)
-        p_max = np.exp((Mag_bounds[ii+1]+10-m_mu)*np.log(10)/5)
+        p_min = np.exp((Mag_bounds[ii  ]+10-m_mu)*ln10/5)
+        p_max = np.exp((Mag_bounds[ii+1]+10-m_mu)*ln10/5)
 
         n = Mag_n[ii]
         args = (abs_sin_lat/hz, n*np.ones(len(pi_mu)), pi_mu, pi_err)
@@ -371,14 +606,14 @@ def logmodel_perr_jitted(sample, params, gmm=None, fid_pars=None, grad=False):
         beta = abs_sin_lat/hz
 
         ep1=1.3; ep2=2.3;
-        a1=-np.log(10)*(ep1-1)/(2.5*alpha1); a2=-np.log(10)*(ep2-1)/(2.5*alpha2);
+        a1=-ln10*(ep1-1)/(2.5*alpha1); a2=-ln10*(ep2-1)/(2.5*alpha2);
         alphag = (np.log(a1/a2) - alpha1*(Mms-Mms1) + alpha2*(Mms-Mms2))/(Mms1-Mms2)
         Ag = 1/a1 * np.exp((alpha1-alphag)*(Mms-Mms1))
         # Latent variables
-        n1 = -(4 + alpha1*5/np.log(10))
-        ng = -(4 + alphag*5/np.log(10))
-        n2 = -(4 + alpha2*5/np.log(10))
-        n3 = -(4 + alpha3*5/np.log(10))
+        n1 = -(4 + alpha1*5/ln10)
+        ng = -(4 + alphag*5/ln10)
+        n2 = -(4 + alpha2*5/ln10)
+        n3 = -(4 + alpha3*5/ln10)
         log_Ams = np.log( fD*a1*a2 ) - \
                   scipy.special.logsumexp(np.array([alpha1*(Mms-Mms1), alpha1*(Mms-Mx),
                                                     alpha1*(Mms-Mms1)+alphag*(Mms1-Mms2), alpha1*(Mms-Mms1),
@@ -413,8 +648,8 @@ def log_expmodel_perr_jitted(p_model, beta, pi_mu, pi_err, m_mu, Mag_bounds, Mag
 
         p_integral = np.zeros(len(pi_mu))
 
-        p_min = np.exp((Mag_bounds[ii  ]+10-m_mu)*np.log(10)/5)
-        p_max = np.exp((Mag_bounds[ii+1]+10-m_mu)*np.log(10)/5)
+        p_min = np.exp((Mag_bounds[ii  ]+10-m_mu)*ln10/5)
+        p_max = np.exp((Mag_bounds[ii+1]+10-m_mu)*ln10/5)
 
         n = Mag_n[ii]
         args = (beta, n*np.ones(len(pi_mu)), pi_mu, pi_err)
@@ -476,20 +711,37 @@ def expmodel_perr_d2logIJ_dp2(p, beta, n, mu, err, transform='none', b=None, a=N
     elif transform=='logit':    return d2logI_dp2 - 1/p**2 - 1/(p-b)**2
     elif transform=='logit_ab': return d2logI_dp2 - 1/(p-a)**2 - 1/(p-b)**2
 
+@njit
+def expmodel_perr_logit_grad_dn(p, args):
+    beta, n, mu, err, a, b = args
+    return p**2 * (a+b-2*p) + p*(p-a)*(b-p)/np.log(p) \
+         + (n*p + beta - p**2*(p-mu)/err**2) * (p-a)*(b-p)
+@njit
+def expmodel_perr_d2logIJ_dp2_dn(p, beta, n, mu, err, transform='none', b=None, a=None):
+    log_p = np.log(p)
+    d2logI_dp2 = -(log_p + 1/p)/(p**2 * log_p**2) - n/p**2 - 2*beta/p**3 - 1/err**2
+    if   transform=='none':     return d2logI_dp2
+    elif transform=='logit':    return d2logI_dp2 - 1/p**2 - 1/(p-b)**2
+    elif transform=='logit_ab': return d2logI_dp2 - 1/(p-a)**2 - 1/(p-b)**2
+#@njit
+def expmodel_perr_integrand_dn(p, beta, n, mu, err):
+    #beta, n, h, mu, err = args
+    return np.log(p) * p**n * np.exp(-beta/p - (p-mu)**2/(2*err**2))
+
 def log_halomodel_perr(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
                                 Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, degree=21):
 
     ep1=1.3; ep2=2.3;
-    a1=-np.log(10)*(ep1-1)/(2.5*alpha1); a2=-np.log(10)*(ep2-1)/(2.5*alpha2);
+    a1=-ln10*(ep1-1)/(2.5*alpha1); a2=-ln10*(ep2-1)/(2.5*alpha2);
 
     alphag = (np.log(a1/a2) - alpha1*(Mms-Mms1) + alpha2*(Mms-Mms2))/(Mms1-Mms2)
     Ag = 1/a1 * np.exp((alpha1-alphag)*(Mms-Mms1))
 
     # Latent variables
-    n1 = -(4 + alpha1*5/np.log(10))
-    ng = -(4 + alphag*5/np.log(10))
-    n2 = -(4 + alpha2*5/np.log(10))
-    n3 = -(4 + alpha3*5/np.log(10))
+    n1 = -(4 + alpha1*5/ln10)
+    ng = -(4 + alphag*5/ln10)
+    n2 = -(4 + alpha2*5/ln10)
+    n3 = -(4 + alpha3*5/ln10)
 
     exponent = np.array([alpha1*(Mms-Mms1), alpha1*(Mms-Mx),
                         alpha1*(Mms-Mms1)+alphag*(Mms1-Mms2), alpha1*(Mms-Mms1),
@@ -516,8 +768,8 @@ def log_halomodel_perr(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alph
         p_integral = np.zeros(len(pi_mu))
 
         n = Mag_n[ii]
-        p_min = np.exp((Mag_bounds[ii  ]+10-m_mu)*np.log(10)/5)
-        p_max = np.exp((Mag_bounds[ii+1]+10-m_mu)*np.log(10)/5)
+        p_min = np.exp((Mag_bounds[ii  ]+10-m_mu)*ln10/5)
+        p_max = np.exp((Mag_bounds[ii+1]+10-m_mu)*ln10/5)
 
         args = (beta, n*np.ones(len(pi_mu)), hz*np.ones(len(pi_mu)), pi_mu, pi_err)
         grad_min = halomodel_perr_grad(p_min, *args)
