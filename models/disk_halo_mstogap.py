@@ -245,10 +245,11 @@ def logmodel_perr_grad(sample, params, gmm=None, fid_pars=None, grad=False):
     # Defined paramers
     theta=fid_pars['lat_min']; Mx=fid_pars['Mmax']; R0=fid_pars['R0']
 
-    logcmpts = np.zeros((len(pi_mu), ncomponents))
     weights = np.zeros(ncomponents)
+    logcmpts = np.zeros((len(pi_mu), ncomponents))
+    if grad: grad_lambda = np.zeros((7, len(pi_mu), ncomponents))
     for j in range(ncomponents):
-        logcmpts[:,j] = fid_pars['models'][j](pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err,
+        output = fid_pars['models'][j](pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err,
                                                 hz=transformed_params[j]['hz'],
                                                 alpha1=transformed_params[j]['alpha1'],
                                                 alpha2=transformed_params[j]['alpha2'],
@@ -258,34 +259,36 @@ def logmodel_perr_grad(sample, params, gmm=None, fid_pars=None, grad=False):
                                                 Mms1=transformed_params[j]['Mms1'],
                                                 Mms2=transformed_params[j]['Mms2'],
                                                 Mto=transformed_params[j]['Mto'],
-                                                Mx=Mx, R0=R0)
+                                                Mx=Mx, R0=R0, grad=grad)
 
         weights[j] = transformed_params[j]['w']
+        if not grad:  logcmpts[:,j] = output
+        else:         logcmpts[:,j], grad_lambda[:-1,:,j] = output
+    logsumcmpts = scipy.special.logsumexp(logcmpts, b=weights, axis=1)
 
-    logsumexp = scipy.special.logsumexp(logcmpts, b=weights, axis=1) + log_cos_lat
+    if not grad: return logsumcmpts + 2*np.log(np.tan(theta)) + log_cos_lat
 
-    if not grad: return 2*np.log(np.tan(theta)) + logsumexp
-    if not grad: return logsumexp + 2*np.log(np.tan(theta)) + log_cos_lat
+    sumcmpts = np.exp(logsumcmpts)
 
     grad_model = np.zeros((len(params), len(pi_mu)))
     params_i = 0
+    reweight = (weights * np.exp(logcmpts)).T/sumcmpts
     for j in range(ncomponents):
-        reweight = (weights * np.exp(logcmpts)).T/np.exp(logsumexp)
         for par in fid_pars['free_pars'][j]:
             if par=='hz': grad_model[params_i] = grad_lambda[0,:,j].copy()*reweight[j]
             if par=='alpha3': grad_model[params_i] = grad_lambda[1,:,j].copy()*reweight[j]
             if par=='fD': grad_model[params_i] = grad_lambda[2,:,j].copy()*reweight[j]
             if par=='Mto': grad_model[params_i] = grad_lambda[3,:,j].copy()*reweight[j]
-            if par=='w': grad_model[params_i] = np.exp(logcmpts[:,j])/np.exp(logsumexp)
+            if par=='w': grad_model[params_i] = np.exp(logcmpts[:,j])/sumcmpts
             params_i+=1
     for par in fid_pars['free_pars']['shd']:
-        if par=='alpha1': grad_model[params_i] = np.sum(grad_lambda[4,:,:] * weights * np.exp(logcmpts), axis=1)/np.exp(logsumexp)
-        if par=='alpha2': grad_model[params_i] = np.sum(grad_lambda[5,:,:] * weights * np.exp(logcmpts), axis=1)/np.exp(logsumexp)
+        if par=='alpha1': grad_model[params_i] = np.sum(grad_lambda[4,:,:] * weights * np.exp(logcmpts), axis=1)/sumcmpts
+        if par=='alpha2': grad_model[params_i] = np.sum(grad_lambda[5,:,:] * weights * np.exp(logcmpts), axis=1)/sumcmpts
         params_i+=1
 
     jacobian = jacobian_params(params, fid_pars, ncomponents=ncomponents)
 
-    return logsumexp, (grad_model.T*jacobian).T# + 2*np.log(np.tan(theta)) + log_cos_lat, grad_model
+    return logsumcmpts + 2*np.log(np.tan(theta)) + log_cos_lat, (grad_model.T*jacobian).T
 
 def log_expmodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
                                 Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, degree=21, grad=False):
@@ -360,6 +363,7 @@ def log_expmodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., 
 
     log_p = scipy.special.logsumexp(Mag_norm, b=p_model, axis=0)
     log_lambda = log_pnorm + log_p - 0.5*np.log(2*np.pi) - log_pi_err
+
     if not grad: return log_lambda
 
     exp_log_p = np.exp(log_p)
@@ -436,223 +440,6 @@ def log_expmodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., 
 
     return log_lambda, grad_lambda.T
 
-def logmodel_perr(sample, params, gmm=None, fid_pars=None, grad=False):
-
-    # Observables
-    pi_mu, pi_err, abs_sin_lat, log_cos_lat, m_mu, log_pi_err = sample
-
-    # Input Parameters
-    ncomponents=fid_pars['ncomponents']
-    transformed_params = combined_params(params, fid_pars, ncomponents=ncomponents)
-
-    # Defined paramers
-    theta=fid_pars['lat_min']; Mx=fid_pars['Mmax']; R0=fid_pars['R0']
-
-    logcmpts = np.zeros((len(pi_mu), ncomponents))
-    weights = np.zeros(ncomponents)
-    for j in range(ncomponents):
-        logcmpts[:,j] = fid_pars['models'][j](pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err,
-                                                hz=transformed_params[j]['hz'],
-                                                alpha1=transformed_params[j]['alpha1'],
-                                                alpha2=transformed_params[j]['alpha2'],
-                                                alpha3=transformed_params[j]['alpha3'],
-                                                fD=transformed_params[j]['fD'],
-                                                Mms=transformed_params[j]['Mms'],
-                                                Mms1=transformed_params[j]['Mms1'],
-                                                Mms2=transformed_params[j]['Mms2'],
-                                                Mto=transformed_params[j]['Mto'],
-                                                Mx=Mx, R0=R0)
-
-        weights[j] = transformed_params[j]['w']
-
-    logsumexp = scipy.special.logsumexp(logcmpts, b=weights, axis=1) + log_cos_lat
-
-    return 2*np.log(np.tan(theta)) + logsumexp
-
-def log_expmodel_perr(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
-                                Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, degree=21):
-
-    ep1=1.3; ep2=2.3;
-    a1=-ln10*(ep1-1)/(2.5*alpha1); a2=-ln10*(ep2-1)/(2.5*alpha2);
-
-    alphag = (np.log(a1/a2) - alpha1*(Mms-Mms1) + alpha2*(Mms-Mms2))/(Mms1-Mms2)
-    Ag = 1/a1 * np.exp((alpha1-alphag)*(Mms-Mms1))
-
-    beta = abs_sin_lat/hz
-
-    # Latent variables
-    n1 = -(4 + alpha1*5/ln10)
-    ng = -(4 + alphag*5/ln10)
-    n2 = -(4 + alpha2*5/ln10)
-    n3 = -(4 + alpha3*5/ln10)
-
-    log_Ams = np.log( fD*a1*a2 ) - \
-              scipy.special.logsumexp(np.array([alpha1*(Mms-Mms1), alpha1*(Mms-Mx),
-                                                alpha1*(Mms-Mms1)+alphag*(Mms1-Mms2), alpha1*(Mms-Mms1),
-                                                alpha2*(Mms-Mto), alpha2*(Mms-Mms2)]),
-                                    b=np.array([a2/alpha1, -a2/alpha1,
-                                                a2/alphag, -a2/alphag,
-                                                a1/alpha2, -a1/alpha2]))
-    log_AG = np.log(-alpha3) + np.log(1-fD)
-
-    log_pnorm = -3*np.log(hz)
-
-    # Absolute magnitude not known
-    Mag_bounds = [-np.inf, Mto, Mms2, Mms1, Mx]
-    Mag_n =      [n3,  n2,   ng,   n1]
-    Mag_norm =   [log_AG  + alpha3*(Mto+10-m_mu),
-                  log_Ams - np.log(a2) + alpha2*(Mms+10-m_mu),
-                  log_Ams + np.log(Ag) + alphag*(Mms+10-m_mu),
-                  log_Ams - np.log(a1) + alpha1*(Mms+10-m_mu)]
-
-    p_model = np.zeros((4, len(pi_mu)))
-    for ii in range(4): #THIS NEEDS TO BE REVERTED BACK TO 4.
-
-        p_integral = np.zeros(len(pi_mu))
-
-        p_min = np.exp((Mag_bounds[ii  ]+10-m_mu)*ln10/5)
-        p_max = np.exp((Mag_bounds[ii+1]+10-m_mu)*ln10/5)
-
-        n = Mag_n[ii]
-        args = (abs_sin_lat/hz, n*np.ones(len(pi_mu)), pi_mu, pi_err)
-        grad_min = expmodel_perr_grad(p_min, args)
-        grad_max = expmodel_perr_grad(p_max, args)
-        legendre = grad_min*grad_max>0
-        legendre[:] = False
-
-        # Gauss - Legendre Quadrature
-        a = p_min[legendre][:,np.newaxis]; b = p_max[legendre][:,np.newaxis]
-        args = (beta[legendre], n*np.ones(len(pi_mu[legendre])), pi_mu[legendre], pi_err[legendre])
-        leg_nodes, leg_weights = np.polynomial.legendre.leggauss(degree)
-        leg_nodes = leg_nodes[np.newaxis,:] * (b-a)/2 + (b+a)/2
-        p_integral[legendre] = np.sum(expmodel_perr_integrand(leg_nodes.T, *args), axis=0)
-
-        # Gauss - Hermite Quadrature
-        a = p_min[~legendre]; b = p_max[~legendre]
-
-        args = (beta[~legendre], n*np.ones(len(pi_mu[~legendre])), pi_mu[~legendre], pi_err[~legendre], a, b)
-        p_mode = functions.get_fooroots_ridder_hm(expmodel_perr_logit_grad, a=a+1e-15, b=b, args=args)
-
-        curve = expmodel_perr_d2logIJ_dp2(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
-                                    functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
-        z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
-
-        sigma = 1/np.sqrt(-curve)
-        p_integral[~legendre] = functions.integrate_gh_gap(expmodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=10)
-
-        p_model[ii] = p_integral
-
-    log_p = scipy.special.logsumexp(Mag_norm, b=p_model, axis=0)
-
-    return log_pnorm + log_p - 0.5*np.log(2*np.pi) - log_pi_err
-
-
-def logmodel_perr_jitted(sample, params, gmm=None, fid_pars=None, grad=False):
-
-    # Observables
-    pi_mu, pi_err, abs_sin_lat, log_cos_lat, m_mu, log_pi_err = sample
-
-    # Input Parameters
-    ncomponents=fid_pars['ncomponents']
-    transformed_params = combined_params(params, fid_pars, ncomponents=ncomponents)
-
-
-    logcmpts = np.zeros((len(pi_mu), ncomponents))
-    weights = np.zeros(ncomponents)
-    p_model = np.zeros((4,len(pi_mu)))
-    for j in range(ncomponents):
-
-        alpha1 = transformed_params[j]['alpha1']
-        alpha2 = transformed_params[j]['alpha2']
-        alpha3 = transformed_params[j]['alpha3']
-        Mms = transformed_params[j]['Mms']
-        Mms1 = transformed_params[j]['Mms1']
-        Mms2 = transformed_params[j]['Mms2']
-        Mto = transformed_params[j]['Mto']
-        fD = transformed_params[j]['fD']
-        hz = transformed_params[j]['hz']
-
-        # Defined paramers
-        theta=fid_pars['lat_min']; Mx=fid_pars['Mmax']; R0=fid_pars['R0']
-        beta = abs_sin_lat/hz
-
-        ep1=1.3; ep2=2.3;
-        a1=-ln10*(ep1-1)/(2.5*alpha1); a2=-ln10*(ep2-1)/(2.5*alpha2);
-        alphag = (np.log(a1/a2) - alpha1*(Mms-Mms1) + alpha2*(Mms-Mms2))/(Mms1-Mms2)
-        Ag = 1/a1 * np.exp((alpha1-alphag)*(Mms-Mms1))
-        # Latent variables
-        n1 = -(4 + alpha1*5/ln10)
-        ng = -(4 + alphag*5/ln10)
-        n2 = -(4 + alpha2*5/ln10)
-        n3 = -(4 + alpha3*5/ln10)
-        log_Ams = np.log( fD*a1*a2 ) - \
-                  scipy.special.logsumexp(np.array([alpha1*(Mms-Mms1), alpha1*(Mms-Mx),
-                                                    alpha1*(Mms-Mms1)+alphag*(Mms1-Mms2), alpha1*(Mms-Mms1),
-                                                    alpha2*(Mms-Mto), alpha2*(Mms-Mms2)]),
-                                        b=np.array([a2/alpha1, -a2/alpha1,
-                                                    a2/alphag, -a2/alphag,
-                                                    a1/alpha2, -a1/alpha2]))
-        log_AG = np.log(-alpha3) + np.log(1-fD)
-        # Absolute magnitude not known
-        Mag_bounds = [-np.inf, Mto, Mms2, Mms1, Mx]
-        Mag_n =      [n3,  n2,   ng,   n1]
-        Mag_norm =   [log_AG  + alpha3*(Mto+10-m_mu),
-                      log_Ams - np.log(a2) + alpha2*(Mms+10-m_mu),
-                      log_Ams + np.log(Ag) + alphag*(Mms+10-m_mu),
-                      log_Ams - np.log(a1) + alpha1*(Mms+10-m_mu)]
-
-        log_pnorm = np.log(8) + scipy.special.gammaln(hz/2) - 3*np.log(R0) - 0.5*np.log(np.pi) - scipy.special.gammaln((hz-3)/2)
-        log_pnorm = -3*np.log(hz)
-
-        p_model = fid_pars['models'][j](p_model, beta, pi_mu, pi_err, m_mu, Mag_bounds, Mag_n)
-        logcmpts[:,j] = scipy.special.logsumexp(Mag_norm, b=p_model, axis=0) + log_pnorm - 0.5*np.log(2*np.pi) - log_pi_err
-
-        weights[j] = transformed_params[j]['w']
-
-    logsumexp = scipy.special.logsumexp(logcmpts, b=weights, axis=1) + log_cos_lat
-
-    return 2*np.log(np.tan(theta)) + logsumexp
-
-def log_expmodel_perr_jitted(p_model, beta, pi_mu, pi_err, m_mu, Mag_bounds, Mag_n, degree=21):
-
-    for ii in range(1): #THIS NEEDS TO BE REVERTED BACK TO 4.
-
-        p_integral = np.zeros(len(pi_mu))
-
-        p_min = np.exp((Mag_bounds[ii  ]+10-m_mu)*ln10/5)
-        p_max = np.exp((Mag_bounds[ii+1]+10-m_mu)*ln10/5)
-
-        n = Mag_n[ii]
-        args = (beta, n*np.ones(len(pi_mu)), pi_mu, pi_err)
-        grad_min = expmodel_perr_grad(p_min, args)
-        grad_max = expmodel_perr_grad(p_max, args)
-        legendre = grad_min*grad_max>0
-        legendre[:] = False
-
-        # Gauss - Legendre Quadrature
-        a = p_min[legendre][:,np.newaxis]; b = p_max[legendre][:,np.newaxis]
-        args = (beta[legendre], n*np.ones(len(pi_mu[legendre])), pi_mu[legendre], pi_err[legendre])
-        leg_nodes, leg_weights = np.polynomial.legendre.leggauss(degree)
-        leg_nodes = leg_nodes[np.newaxis,:] * (b-a)/2 + (b+a)/2
-        p_integral[legendre] = np.sum(expmodel_perr_integrand(leg_nodes.T, *args), axis=0)
-
-        # Gauss - Hermite Quadrature
-        a = p_min[~legendre]; b = p_max[~legendre]
-
-        args = (beta[~legendre], n*np.ones(len(pi_mu[~legendre])), pi_mu[~legendre], pi_err[~legendre], p_max)
-        p_mode = functions.get_fooroots_ridder_hm(expmodel_perr_logit_grad, a=a, b=b, args=args)
-
-        curve = expmodel_perr_d2logIJ_dp2(p_mode, *args[:-1], transform='logit_ab', a=a, b=b) / \
-                                    functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
-        z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
-
-        sigma = 1/np.sqrt(-curve)
-        p_integral[~legendre] = functions.integrate_gh_gap(expmodel_perr_integrand, z_mode, sigma, args[:-1], transform='logit_ab', a=a, b=b, degree=10)
-
-        p_model[ii] = p_integral
-
-    return p_model
-
 def expmodel_integrand(p, beta, n, h, mu, err):
     return p**n * np.exp(-beta/p)
 def expmodel_perr_integrand(p, beta, n, mu, err):
@@ -687,83 +474,6 @@ def expmodel_perr_d2logIJ_dp2_dn(p, beta, n, mu, err, transform='none', b=None, 
     if   transform=='none':     return d2logI_dp2
     elif transform=='logit':    return d2logI_dp2 - 1/p**2 - 1/(p-b)**2
     elif transform=='logit_ab': return d2logI_dp2 - 1/(p-a)**2 - 1/(p-b)**2
-
-
-def log_halomodel_perr(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
-                                Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, degree=21):
-
-    ep1=1.3; ep2=2.3;
-    a1=-ln10*(ep1-1)/(2.5*alpha1); a2=-ln10*(ep2-1)/(2.5*alpha2);
-
-    alphag = (np.log(a1/a2) - alpha1*(Mms-Mms1) + alpha2*(Mms-Mms2))/(Mms1-Mms2)
-    Ag = 1/a1 * np.exp((alpha1-alphag)*(Mms-Mms1))
-
-    # Latent variables
-    n1 = -(4 + alpha1*5/ln10)
-    ng = -(4 + alphag*5/ln10)
-    n2 = -(4 + alpha2*5/ln10)
-    n3 = -(4 + alpha3*5/ln10)
-
-    exponent = np.array([alpha1*(Mms-Mms1), alpha1*(Mms-Mx),
-                        alpha1*(Mms-Mms1)+alphag*(Mms1-Mms2), alpha1*(Mms-Mms1),
-                        alpha2*(Mms-Mto), alpha2*(Mms-Mms2)])
-    b = np.array([a2/alpha1, -a2/alpha1, a2/alphag, -a2/alphag, a1/alpha2, -a1/alpha2])
-    log_Ams = np.log( fD*a1*a2 ) - scipy.special.logsumexp(exponent,b=b)
-
-    log_AG = np.log(-alpha3) + np.log(1-fD)
-
-    beta = abs_sin_lat/R0
-    log_pnorm = np.log(8) + scipy.special.gammaln(hz/2) - 3*np.log(R0) - 0.5*np.log(np.pi) - scipy.special.gammaln((hz-3)/2)
-
-    # Absolute magnitude not known
-    Mag_bounds = [-np.inf, Mto, Mms2, Mms1, Mx]
-    Mag_n =      [n3,  n2,   ng,   n1]
-    Mag_norm =   [log_AG  + alpha3*(Mto+10-m_mu),
-                  log_Ams - np.log(a2) + alpha2*(Mms+10-m_mu),
-                  log_Ams + np.log(Ag) + alphag*(Mms+10-m_mu),
-                  log_Ams - np.log(a1) + alpha1*(Mms+10-m_mu)]
-
-    p_model = np.zeros((4, len(pi_mu)))
-    for ii in range(4):
-
-        p_integral = np.zeros(len(pi_mu))
-
-        n = Mag_n[ii]
-        p_min = np.exp((Mag_bounds[ii  ]+10-m_mu)*ln10/5)
-        p_max = np.exp((Mag_bounds[ii+1]+10-m_mu)*ln10/5)
-
-        args = (beta, n*np.ones(len(pi_mu)), hz*np.ones(len(pi_mu)), pi_mu, pi_err)
-        grad_min = halomodel_perr_grad(p_min, *args)
-        grad_max = halomodel_perr_grad(p_max, *args)
-        legendre = grad_min*grad_max>0
-        legendre[:]=False
-
-        # Gauss - Legendre Quadrature
-        a = p_min[legendre]; b = p_max[legendre]
-        args = (beta[legendre], n*np.ones(len(pi_mu))[legendre],
-                    hz*np.ones(len(pi_mu))[legendre], pi_mu[legendre], pi_err[legendre])
-        leg_nodes, leg_weights = np.polynomial.legendre.leggauss(degree)
-        leg_nodes = leg_nodes[np.newaxis,:].T * (b-a)/2 + (b+a)/2
-        p_integral[legendre] = np.sum(halomodel_perr_integrand(leg_nodes, *args), axis=0)
-
-        # Gauss - Hermite Quadrature
-        a = p_min[~legendre]; b = p_max[~legendre]
-        args = (beta[~legendre], n*np.ones(len(pi_mu[~legendre])),
-                    hz*np.ones(len(pi_mu[~legendre])), pi_mu[~legendre], pi_err[~legendre], a, b)
-        p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad, a=a+1e-15, b=b, args=args)
-        curve = halomodel_perr_d2logIJ_dp2(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
-                                    functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
-
-        z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
-        sigma = 1/np.sqrt(-curve)
-        p_integral[~legendre] = functions.integrate_gh_gap(halomodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=10)
-
-        p_model[ii] = p_integral
-
-    log_p = scipy.special.logsumexp(Mag_norm, b=p_model, axis=0)
-    #print(log_p)
-
-    return log_pnorm + log_p - 0.5*np.log(2*np.pi) - log_pi_err
 
 def log_halomodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
                                 Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, degree=21, grad=False):
