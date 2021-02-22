@@ -14,12 +14,12 @@ def expit(x, pmin=0, pmax=1):
 def logit_scaled(a, b):
     return (lambda x:(a + b*np.exp(x))/(1+np.exp(x)), lambda x:np.log((x-a)/(b-x)), lambda x:(x-a)*(b-x)/(b-a))
 
-func_inv_jac = {'none': lambda a, b: (lambda x:x, lambda x:x, lambda x:x),
-                'exp':  lambda a, b: (lambda x:np.exp(x), lambda x:np.log(x), lambda x:x),
-                'expn': lambda a, b: (lambda x:np.exp(-x), lambda x:-np.log(x), lambda x:x),
-                'nexp': lambda a, b: (lambda x:-np.exp(x), lambda x:np.log(-x), lambda x:x),
-                'logit':lambda a, b: (lambda x: (np.exp(x))/(1+np.exp(x)), lambda x: np.log(x/(1-x)), lambda x:x),
-                'logit_scaled':lambda a, b: (lambda x:(a + b*np.exp(x))/(1+np.exp(x)), lambda x:np.log((x-a)/(b-x)), lambda x:(x-a)*(b-x)/(b-a))}
+func_inv_jac = {'none': lambda a, b: (lambda p:p, lambda x:x, lambda x:1),
+                'exp':  lambda a, b: (lambda p:np.exp(p), lambda x:np.log(x), lambda x:x),
+                'expn': lambda a, b: (lambda p:np.exp(-p), lambda x:-np.log(x), lambda x:x),
+                'nexp': lambda a, b: (lambda p:-np.exp(p), lambda x:np.log(-x), lambda x:x),
+                'logit':lambda a, b: (lambda p: (np.exp(p))/(1+np.exp(p)), lambda x: np.log(x/(1-x)), lambda x:x*(1-x)),
+                'logit_scaled':lambda a, b: (lambda p:(a + b*np.exp(p))/(1+np.exp(p)), lambda x:np.log((x-a)/(b-x)), lambda x:(x-a)*(b-x)/(b-a))}
 
 def logit_label(s,a,b):
     if (a==0) and (b==1): return r'logit$({0})$'.format(s.replace('$',''))

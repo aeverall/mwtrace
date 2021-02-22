@@ -16,6 +16,22 @@ from matplotlib.ticker import ScalarFormatter
 from scipy.ndimage import gaussian_filter
 
 
+
+def plot_hist(data, bins, ax=None, fill_poisson=None, plot_kwargs={}, fill_kwargs={}):
+
+    hist, bins = np.histogram(data, bins=bins)
+    ax.plot(np.repeat(bins,2), np.insert(np.repeat(hist/(bins[1:]-bins[:-1]),2), (0,len(hist)*2), (0,0)),**plot_kwargs)
+    if fill_poisson:
+        y = hist/(bins[1:]-bins[:-1])
+        y_lower = (hist-np.sqrt(hist))/(bins[1:]-bins[:-1])
+        y_upper = (hist+np.sqrt(hist))/(bins[1:]-bins[:-1])
+        ax.fill_between(np.repeat(bins,2), np.insert(np.repeat(y_lower,2),(0,len(y)*2),(0,0)),
+                                            np.insert(np.repeat(y_upper,2),(0,len(y)*2),(0,0)),
+                                            **fill_kwargs)
+
+
+    return None
+
 def plot_corner(sampler, functions=None, nburnt=None, clean_chains=np.inf, **kwargs):
 
     if type(sampler) is np.ndarray:

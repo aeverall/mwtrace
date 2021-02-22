@@ -65,6 +65,9 @@ def run_mcmc_global(p0, poisson_like, bounds, nstep=1000, ncores=1, notebook=Fal
 
     ndim=p0.shape[0]
 
+    # print('bounds', bounds)
+    # print('p0', p0)
+    # print('p0walker', np.random.normal(p0, np.abs(bounds[1]-bounds[0]).astype(float)/100000))
     if initialise: nwalkers=ndim*4; p0_walkers = np.random.normal(p0, np.abs(bounds[1]-bounds[0]).astype(float)/100000, size=(nwalkers,ndim))
     else: nwalkers=p0.shape[1]; p0_walkers = p0.copy().T
 

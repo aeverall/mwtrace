@@ -264,11 +264,14 @@ def logmodel_perr_grad(sample, params, gmm=None, fid_pars=None, grad=False):
         weights[j] = transformed_params[j]['w']
         if not grad:  logcmpts[:,j] = output
         else:         logcmpts[:,j], grad_lambda[:-1,:,j] = output
+    #print(np.sum(grad_lambda, axis=1))
+
     logsumcmpts = scipy.special.logsumexp(logcmpts, b=weights, axis=1)
 
     if not grad: return logsumcmpts + 2*np.log(np.tan(theta)) + log_cos_lat
 
     sumcmpts = np.exp(logsumcmpts)
+
 
     grad_model = np.zeros((len(params), len(pi_mu)))
     params_i = 0
@@ -282,9 +285,13 @@ def logmodel_perr_grad(sample, params, gmm=None, fid_pars=None, grad=False):
             if par=='w': grad_model[params_i] = np.exp(logcmpts[:,j])/sumcmpts
             params_i+=1
     for par in fid_pars['free_pars']['shd']:
-        if par=='alpha1': grad_model[params_i] = np.sum(grad_lambda[4,:,:] * weights * np.exp(logcmpts), axis=1)/sumcmpts
-        if par=='alpha2': grad_model[params_i] = np.sum(grad_lambda[5,:,:] * weights * np.exp(logcmpts), axis=1)/sumcmpts
+        # if par=='alpha1': grad_model[params_i] = np.sum(grad_lambda[4,:,:].copy() * weights * np.exp(logcmpts), axis=1)/sumcmpts
+        # if par=='alpha2': grad_model[params_i] = np.sum(grad_lambda[5,:,:].copy() * weights * np.exp(logcmpts), axis=1)/sumcmpts
+        if par=='alpha1': grad_model[params_i] = np.sum(grad_lambda[4,:,:].copy() * reweight.T, axis=1)
+        if par=='alpha2': grad_model[params_i] = np.sum(grad_lambda[5,:,:].copy() * reweight.T, axis=1)
         params_i+=1
+
+    #print((grad_lambda[4,:,:] * weights * np.exp(logcmpts)).shape)
 
     jacobian = jacobian_params(params, fid_pars, ncomponents=ncomponents)
 
@@ -424,7 +431,7 @@ def log_expmodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., 
     # alpha1
     dalphag_dalpha1 = (-1/alpha1 - (Mms-Mms1))/(Mms1-Mms2)
     dlnAms_dalpha1 = -1/alpha1 - np.sum(b_alpha1*np.exp(Ams_exponent))*Ams/(fD*a1*a2)
-    grad_lambda[:,4] = (dlnAms_dalpha1 * np.sum(p_model[1:]*np.exp(Mag_norm[1:])) \
+    grad_lambda[:,4] = (dlnAms_dalpha1 * np.sum(p_model[1:]*np.exp(Mag_norm[1:]), axis=0) \
                         + (np.exp(Mag_norm[3]) * ((1/alpha1 + (Mms+10-m_mu)) * p_model[3] \
                                                 - 5/ln10 * dp_model_dn[3]) \
                         +  np.exp(Mag_norm[2]) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)) * p_model[2] \
@@ -432,7 +439,7 @@ def log_expmodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., 
     # alpha2
     dalphag_dalpha2 = (1/alpha2 + (Mms-Mms2))/(Mms1-Mms2)
     dlnAms_dalpha2 = -1/alpha2 - np.sum(b_alpha2*np.exp(Ams_exponent))*Ams/(fD*a1*a2)
-    grad_lambda[:,5] = (dlnAms_dalpha2 * np.sum(p_model[1:]*np.exp(Mag_norm[1:])) \
+    grad_lambda[:,5] = (dlnAms_dalpha2 * np.sum(p_model[1:]*np.exp(Mag_norm[1:]), axis=0) \
                         + (np.exp(Mag_norm[1]) * ((1/alpha2 + (Mms+10-m_mu)) * p_model[1] \
                                                 - 5/ln10 * dp_model_dn[1]) \
                         +  np.exp(Mag_norm[2]) * (dalphag_dalpha2*(Mms1+10-m_mu) * p_model[2] \
@@ -607,7 +614,7 @@ def log_halomodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1.,
     # alpha1
     dalphag_dalpha1 = (-1/alpha1 - (Mms-Mms1))/(Mms1-Mms2)
     dlnAms_dalpha1 = -1/alpha1 - np.sum(b_alpha1*np.exp(Ams_exponent))*Ams/(fD*a1*a2)
-    grad_lambda[:,4] = (dlnAms_dalpha1 * np.sum(p_model[1:]*np.exp(Mag_norm[1:])) \
+    grad_lambda[:,4] = (dlnAms_dalpha1 * np.sum(p_model[1:]*np.exp(Mag_norm[1:]), axis=0) \
                         + (np.exp(Mag_norm[3]) * ((1/alpha1 + (Mms+10-m_mu)) * p_model[3] \
                                                 - 5/ln10 * dp_model_dn[3]) \
                         +  np.exp(Mag_norm[2]) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)) * p_model[2] \
@@ -615,7 +622,7 @@ def log_halomodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1.,
     # alpha2
     dalphag_dalpha2 = (1/alpha2 + (Mms-Mms2))/(Mms1-Mms2)
     dlnAms_dalpha2 = -1/alpha2 - np.sum(b_alpha2*np.exp(Ams_exponent))*Ams/(fD*a1*a2)
-    grad_lambda[:,5] = (dlnAms_dalpha2 * np.sum(p_model[1:]*np.exp(Mag_norm[1:])) \
+    grad_lambda[:,5] = (dlnAms_dalpha2 * np.sum(p_model[1:]*np.exp(Mag_norm[1:]), axis=0) \
                         + (np.exp(Mag_norm[1]) * ((1/alpha2 + (Mms+10-m_mu)) * p_model[1] \
                                                 - 5/ln10 * dp_model_dn[1]) \
                         +  np.exp(Mag_norm[2]) * (dalphag_dalpha2*(Mms1+10-m_mu) * p_model[2] \
@@ -706,11 +713,11 @@ def combined_params(params, fid_pars, ncomponents=1, transform=True):
     params_i = 0
     for j in range(ncomponents):
         output_pars[j]={}
+        for par in fid_pars['fixed_pars'][j].keys():
+            output_pars[j][par]=fid_pars['fixed_pars'][j][par]
         for par in fid_pars['free_pars'][j]:
             if transform: output_pars[j][par]=fid_pars['functions'][j][par](params[params_i]); params_i += 1;
             else: output_pars[j][par]=params[params_i]; params_i += 1;
-        for par in fid_pars['fixed_pars'][j].keys():
-            output_pars[j][par]=fid_pars['fixed_pars'][j][par]
     for par in fid_pars['free_pars']['shd']:
         for j in range(ncomponents):
             if transform: output_pars[j][par]=fid_pars['functions']['shd'][par](params[params_i])
@@ -731,14 +738,133 @@ def jacobian_params(params, fid_pars, ncomponents=1, transform=True):
     for j in range(ncomponents):
         for par in fid_pars['free_pars'][j]:
             if transform: jacobian[params_i]=fid_pars['jacobians'][j][par](fid_pars['functions'][j][par](params[params_i])); params_i += 1;
-            else: params_i += 1;
+            else: jacobian[params_i]=params[params_i]; params_i += 1;
     for par in fid_pars['free_pars']['shd']:
-        for j in range(ncomponents):
-            if transform: jacobian[params_i]=fid_pars['jacobians'][j][par](fid_pars['functions'][j][par](params[params_i]))
-            else: jacobian[params_i]=params[params_i]
+        if transform: jacobian[params_i]=fid_pars['jacobians']['shd'][par](fid_pars['functions']['shd'][par](params[params_i]))
+        else: jacobian[params_i]=params[params_i]
         params_i += 1
 
     return jacobian
+
+#%% Priors
+def model_prior(params, fid_pars=None, grad=False, bounds=None):
+
+    free_pars = fid_pars['free_pars']
+
+    trans_params = combined_params(params, fid_pars, ncomponents=fid_pars['ncomponents'], transform=True)
+    total_weight = np.sum([trans_params[j]['w'] for j in range(fid_pars['ncomponents'])])
+
+    logprior = 0.;
+    logprior_grad = np.zeros(len(params));
+
+    prior_functions = {'none': lambda x: 0,
+                       'logistic': lambda x: -x - 2*np.log(1+np.exp(-x)),
+                       'dirichlet': lambda x, a: (a-1)*np.log(trans_params[j]['w']/total_weight)}
+    prior_gradients = {'none': lambda x: 0,
+                       'logistic': lambda x: (1-np.exp(x))/(1+np.exp(x)),
+                       'dirichlet': lambda x, a: (a-1)*( 1 - fid_pars['ncomponents']*np.exp(params[params_i])/total_weight )}
+    logistic = lambda x: -x - 2*np.log(1+np.exp(-x))
+    logistic_grad = lambda x: (1-np.exp(x))/(1+np.exp(x))
+
+    params_i = 0
+    for j in range(fid_pars['ncomponents']):
+        for par in fid_pars['free_pars'][j]:
+            prior_args = fid_pars['priors'][j][par]
+            logprior += prior_functions[prior_args[0]](params[params_i], *prior_args[1:])
+            if grad: logprior_grad[params_i] += prior_gradients[prior_args[0]](params[params_i], *prior_args[1:])
+            params_i += 1;
+    for par in fid_pars['free_pars']['shd']:
+        prior_args = fid_pars['priors']['shd'][par]
+        logprior += prior_functions[prior_args[0]](params[params_i], *prior_args[1:])
+        if grad: logprior_grad[params_i] += prior_gradients[prior_args[0]](params[params_i], *prior_args[1:])
+        params_i += 1;
+
+    unbound = (params<=bounds[0])|(params>=bounds[1])
+    if np.sum(unbound)>0:
+        if not grad: return -1e30
+        else: return -1e30, np.zeros(len(params))
+
+    if not grad: return logprior
+    elif grad: return logprior, logprior_grad
+
+
+#%% Model Distribution
+def z_component_models(z, hz=1., R0=8.27, component=None):
+    if component=='disk':
+        norm = 1/(2*hz**3)
+        dist = np.exp(-z/hz)
+    elif component=='halo':
+        norm = 4*scipy.special.gamma(hz/2)/(R0**3 * np.sqrt(np.pi) * scipy.special.gamma((hz-3)/2))
+        dist = ((z**2)/(R0**2) + 1)**(-hz/2)
+
+    return norm*dist
+
+def z_model(z, params, fid_pars=None, model='combined'):
+
+    # Input Parameters
+    ncomponents=fid_pars['ncomponents']
+    transformed_params = combined_params(params, fid_pars, ncomponents=ncomponents)
+
+    dist_cmpts = np.zeros((len(z), ncomponents))
+    weights = np.zeros(ncomponents)
+    for j in range(ncomponents):
+        dist_cmpts[:,j] = z_component_models(z, hz=transformed_params[j]['hz'], R0=fid_pars['R0'], component=fid_pars['components'][j])
+        weights[j] = transformed_params[j]['w']
+
+    if model=='combined': return  z**2 * np.sum(weights*dist_cmpts, axis=1)
+    elif model=='all':    return (z**2 *       (weights*dist_cmpts).T).T
+
+def M_model(M, params, fid_pars=None, model='combined'):
+
+    # Input Parameters
+    ncomponents=fid_pars['ncomponents']
+    transformed_params = combined_params(params, fid_pars, ncomponents=ncomponents)
+
+    dist_cmpts = np.zeros((len(M), ncomponents))
+    weights = np.zeros(ncomponents)
+    for j in range(ncomponents):
+        alpha1=transformed_params[j]['alpha1']; alpha2=transformed_params[j]['alpha2']; alpha3=transformed_params[j]['alpha3']
+        Mms=transformed_params[j]['Mms']; Mms1=transformed_params[j]['Mms1']; Mms2=transformed_params[j]['Mms2']; Mto=transformed_params[j]['Mto'];
+        fD=transformed_params[j]['fD']; Mx=fid_pars['Mmax']
+
+        ep1=1.3; ep2=2.3;
+        a1=-np.log(10)*(ep1-1)/(2.5*alpha1); a2=-np.log(10)*(ep2-1)/(2.5*alpha2);
+
+        alphag = (np.log(a1/a2) - alpha1*(Mms-Mms1) + alpha2*(Mms-Mms2))/(Mms1-Mms2)
+        Ag = 1/a1 * np.exp((alpha1-alphag)*(Mms-Mms1))
+
+        # Latent variables
+        n1 = -(4 + alpha1*5/np.log(10))
+        ng = -(4 + alphag*5/np.log(10))
+        n2 = -(4 + alpha2*5/np.log(10))
+        n3 = -(4 + alpha3*5/np.log(10))
+
+        pop1 = M>Mms1
+        popg = M>Mms2
+        pop2 = M>Mto
+
+        log_Ams = np.log( fD*a1*a2 ) - \
+                  scipy.special.logsumexp(np.array([alpha1*(Mms-Mms1), alpha1*(Mms-Mx),
+                                                    alpha1*(Mms-Mms1)+alphag*(Mms1-Mms2), alpha1*(Mms-Mms1),
+                                                    alpha2*(Mms-Mto), alpha2*(Mms-Mms2)]),
+                                        b=np.array([a2/alpha1, -a2/alpha1,
+                                                    a2/alphag, -a2/alphag,
+                                                    a1/alpha2, -a1/alpha2]))
+        log_AG = np.log(-alpha3) + np.log(1-fD)
+
+        log_m = np.where(pop1, log_Ams - np.log(a1) + alpha1*(Mms-M),
+                np.where(popg, log_Ams + np.log(Ag) + alphag*(Mms-M),
+                np.where(pop2, log_Ams - np.log(a2) + alpha2*(Mms-M),
+                               log_AG  + alpha3*(Mto-M))))
+
+        m_dist = np.exp(log_m)
+        m_dist[M>fid_pars['Mmax']]=0.
+        dist_cmpts[:,j] = m_dist
+
+        weights[j] = transformed_params[j]['w']
+
+    if model=='combined': return  np.sum(weights*dist_cmpts, axis=1)
+    elif model=='all':    return        (weights*dist_cmpts)
 
 
 #%% Unit Tests
@@ -818,6 +944,51 @@ class TestPoissonBinomial(unittest.TestCase):
         model = lambda x: (x-test_args[-2])*(test_args[-1]-x)*dh_msto.expmodel_perr_integrand(x, *test_args[:-2])
         self.assertAlmostEqual( grad(0.57), scipy.optimize.approx_fprime(np.array([0.57]), model, 1e-12), 8)
         self.assertAlmostEqual( grad(0.01), scipy.optimize.approx_fprime(np.array([0.01]), model, 1e-12), 8)
+
+    def test_priors(self):
+
+        # transform, p1, p2, lower bound, upper bound
+        param_trans = {}
+        a_dirichlet = 2
+        param_trans['shd'] = {'alpha1':('nexp',0,0,-3,3,'none'),
+                              'alpha2':('nexp',0,0,-3,3,'none')}
+        param_trans[0] = {'w':('exp',0,0,-10,10,'dirichlet',a_dirichlet),
+                          'fD': ('logit_scaled', 0,1, -10,10,'logistic'),
+                          'alpha3':('nexp',0,0,-10,10,'none'),
+                          'hz': ('logit_scaled', 0,  1.2,-10,10,'logistic')}
+        param_trans[1] = {'w':('exp',0,0,-10,10,'dirichlet',a_dirichlet),
+                          'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
+                          'alpha3':('nexp',0,0,-10,10,'none'),
+                          'hz': ('logit_scaled', 1.2,3,-10,10,'logistic')}
+        param_trans[2] = {'w':('exp',0,0,-10,10,'dirichlet',a_dirichlet),
+                          'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
+                          'alpha3':('nexp',0,0,-10,10,'none'),
+                          'hz': ('logit_scaled', 3,  7.3,-10,10,'logistic')}
+
+        fid_pars['free_pars'][0] = ['w', 'hz', 'fD']
+        fid_pars['free_pars'][1] = ['w', 'hz', 'fD']
+        fid_pars['free_pars'][2] = ['w', 'hz', 'fD']
+        fid_pars['free_pars']['shd'] = ['alpha1', 'alpha2']
+        ndim=np.sum([len(fid_pars['free_pars'][key]) for key in fid_pars['free_pars'].keys()])
+
+        fid_pars['priors'] = {}
+        params_i = 0
+        for cmpt in np.arange(fid_pars['ncomponents']).tolist()+['shd',]:
+            fid_pars['priors'][cmpt]={};
+            for par in fid_pars['free_pars'][cmpt]:
+                fid_pars['priors'][cmpt][par] = param_trans[cmpt][par][5:]
+                params_i += 1;
+
+        p0 = np.array( [transformations.logit(np.random.rand()),transformations.logit(np.random.rand()),-np.random.rand()*1,
+                        transformations.logit(np.random.rand()),transformations.logit(np.random.rand()),-np.random.rand()*1,
+                        transformations.logit(np.random.rand()),transformations.logit(np.random.rand()),-np.random.rand()*1,
+                        -np.random.rand()*1,-np.random.rand()*1] )
+
+        model = lambda x: dh_msto.model_prior(x, fid_pars=fid_pars, grad=False)
+        grad = lambda x: dh_msto.model_prior(x, fid_pars=fid_pars, grad=True)[1]
+        scipy.optimize.approx_fprime(p0, model, 1e-8), grad(p0)
+        self.assertAlmostEqual( grad(p0), scipy.optimize.approx_fprime(np.array([p0]), model, 1e-12), 8)
+
 
 if __name__ == '__main__':
     unittest.main()
