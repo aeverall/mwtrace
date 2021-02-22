@@ -264,6 +264,8 @@ def logmodel_perr_grad(sample, params, gmm=None, fid_pars=None, grad=False):
         weights[j] = transformed_params[j]['w']
         if not grad:  logcmpts[:,j] = output
         else:         logcmpts[:,j], grad_lambda[:-1,:,j] = output
+    #print(np.sum(grad_lambda, axis=1))
+
     logsumcmpts = scipy.special.logsumexp(logcmpts, b=weights, axis=1)
 
     if not grad: return logsumcmpts + 2*np.log(np.tan(theta)) + log_cos_lat
@@ -745,117 +747,45 @@ def jacobian_params(params, fid_pars, ncomponents=1, transform=True):
     return jacobian
 
 #%% Priors
-############### ----------------- PRIOR ----------------------####################
+def model_prior(params, fid_pars=None, grad=False, bounds=None):
 
-def model_prior(params, fid_pars=None, j=None, grad=False):
+    free_pars = fid_pars['free_pars']
 
+    trans_params = combined_params(params, fid_pars, ncomponents=fid_pars['ncomponents'], transform=True)
+    total_weight = np.sum([trans_params[j]['w'] for j in range(fid_pars['ncomponents'])])
+
+    logprior = 0.;
+    logprior_grad = np.zeros(len(params));
+
+    prior_functions = {'none': lambda x: 0,
+                       'logistic': lambda x: -x - 2*np.log(1+np.exp(-x)),
+                       'dirichlet': lambda x, a: (a-1)*np.log(trans_params[j]['w']/total_weight)}
+    prior_gradients = {'none': lambda x: 0,
+                       'logistic': lambda x: (1-np.exp(x))/(1+np.exp(x)),
+                       'dirichlet': lambda x, a: (a-1)*( 1 - fid_pars['ncomponents']*np.exp(params[params_i])/total_weight )}
     logistic = lambda x: -x - 2*np.log(1+np.exp(-x))
     logistic_grad = lambda x: (1-np.exp(x))/(1+np.exp(x))
+
     params_i = 0
+    for j in range(fid_pars['ncomponents']):
+        for par in fid_pars['free_pars'][j]:
+            prior_args = fid_pars['priors'][j][par]
+            logprior += prior_functions[prior_args[0]](params[params_i], *prior_args[1:])
+            if grad: logprior_grad[params_i] += prior_gradients[prior_args[0]](params[params_i], *prior_args[1:])
+            params_i += 1;
+    for par in fid_pars['free_pars']['shd']:
+        prior_args = fid_pars['priors']['shd'][par]
+        logprior += prior_functions[prior_args[0]](params[params_i], *prior_args[1:])
+        if grad: logprior_grad[params_i] += prior_gradients[prior_args[0]](params[params_i], *prior_args[1:])
+        params_i += 1;
 
-    #jacobian = jacobian_params(params, fid_pars, ncomponents=fid_pars['ncomponents'])
+    unbound = (params<=bounds[0])|(params>=bounds[1])
+    if np.sum(unbound)>0:
+        if not grad: return -1e30
+        else: return -1e30, np.zeros(len(params))
 
-    dir_a = 2
-
-    # Input Parameters
-    ncomponents=fid_pars['ncomponents']
-    untrans_params = combined_params(params, fid_pars, ncomponents=ncomponents, transform=False)
-    trans_params = combined_params(params, fid_pars, ncomponents=ncomponents, transform=True)
-
-    total_weight = np.sum([trans_params[j]['w'] for j in range(ncomponents)])
-
-    logprior = 0.
-    for j in range(ncomponents):
-        # Logistic
-        for key in ['fD', 'Mms', 'Mms1', 'Mms2', 'Mto']:
-            logprior += logistic(untrans_params[j][key])
-        # Dirichlet
-        logprior += (dir_a-1)*np.log(trans_params[j]['w']/total_weight)
-
-
-    if grad:
-        logprior_grad = np.zeros(len(params))
-        for j in range(ncomponents):
-            for par in fid_pars['free_pars'][j]:
-                if par in ('fD', 'Mto'): logprior_grad[params_i] = logistic_grad(untrans_params[j][par])
-                elif par in ('w'): logprior_grad[params_i] = (dir_a-1)*( 1 - ncomponents*np.exp(untrans_params[j]['w'])/total_weight )
-                params_i+=1
-        for par in fid_pars['free_pars']['shd']:
-            if par in ('fD', 'Mto'): logprior_grad[params_i] = logistic_grad(untrans_params['shd'][par])
-            params_i+=1
-
-    if not grad:
-        if np.isnan(logprior): return -1e30
-        return logprior
-
-    elif grad:
-        if np.isnan(logprior): return -1e30, np.zeros(len(params))-1e30
-        return logprior, logprior_grad
-
-# def model_prior(params, fid_pars=None, j=None, grad=False):
-#
-#     logistic = lambda x: -x - 2*np.log(1+np.exp(-x))
-#     logistic_grad = lambda x: (1-np.exp(x))/(1+np.exp(x))
-#     params_i = 0
-#
-#     #jacobian = jacobian_params(params, fid_pars, ncomponents=fid_pars['ncomponents'])
-#
-#     dir_a = 2
-#
-#     if j is None:
-#         # Input Parameters
-#         ncomponents=fid_pars['ncomponents']
-#         untrans_params = combined_params(params, fid_pars, ncomponents=ncomponents, transform=False)
-#         trans_params = combined_params(params, fid_pars, ncomponents=ncomponents, transform=True)
-#
-#         total_weight = np.sum([trans_params[j]['w'] for j in range(ncomponents)])
-#
-#         logprior = 0.
-#         for j in range(ncomponents):
-#             # Logistic
-#             for key in ['fD', 'Mms', 'Mms1', 'Mms2', 'Mto']:
-#                 logprior += logistic(untrans_params[j][key])
-#             # Dirichlet
-#             logprior += (dir_a-1)*np.log(trans_params[j]['w']/total_weight)
-#             # logprior += (dir_a-1)*( np.log(trans_params[j]['w']) )#-np.log(total_weight) )
-#
-#
-#         if grad:
-#             logprior_grad = np.zeros(len(params))
-#             for j in range(ncomponents):
-#                 for par in fid_pars['free_pars'][j]:
-#                     if par in ('fD', 'Mto'): logprior_grad[params_i] = logistic_grad(untrans_params[j][par])
-#                     elif par in ('w'): logprior_grad[params_i] = (dir_a-1)*( 1 - ncomponents*np.exp(untrans_params[j]['w'])/total_weight )
-#                     params_i+=1
-#             for par in fid_pars['free_pars']['shd']:
-#                 if par in ('fD', 'Mto'): logprior_grad[params_i] = logistic_grad(untrans_params['shd'][par])
-#                 params_i+=1
-#
-#     else:
-#         # Input Parameters
-#         ncomponents=fid_pars['ncomponents']
-#         untrans_params = component_params(params, j, fid_pars, transform=False)
-#         trans_params = component_params(params, j, fid_pars, transform=True)
-#
-#         logprior = 0.
-#         for key in ['fD', 'Mms', 'Mms1', 'Mms2', 'Mto']:
-#             logprior += logistic(untrans_params[key])
-#         #logprior += (dir_a-1)*np.log(trans_params['w'])
-#
-#
-#         if grad:
-#             logprior_grad = np.zeros(len(params))
-#             for par in fid_pars['free_pars'][j]:
-#                 if par in ('fD', 'Mto'): logprior_grad[params_i] = logistic_grad(untrans_params[par])
-#                 #elif par in ('w'): logprior_grad[params_i] = (dir_a-1)/trans_params['w']
-#                 params_i+=1
-#
-#     if not grad:
-#         if np.isnan(logprior): return -1e30
-#         return logprior
-#
-#     elif grad:
-#         return logprior, logprior_grad
+    if not grad: return logprior
+    elif grad: return logprior, logprior_grad
 
 
 #%% Unit Tests
@@ -935,6 +865,51 @@ class TestPoissonBinomial(unittest.TestCase):
         model = lambda x: (x-test_args[-2])*(test_args[-1]-x)*dh_msto.expmodel_perr_integrand(x, *test_args[:-2])
         self.assertAlmostEqual( grad(0.57), scipy.optimize.approx_fprime(np.array([0.57]), model, 1e-12), 8)
         self.assertAlmostEqual( grad(0.01), scipy.optimize.approx_fprime(np.array([0.01]), model, 1e-12), 8)
+
+    def test_priors(self):
+
+        # transform, p1, p2, lower bound, upper bound
+        param_trans = {}
+        a_dirichlet = 2
+        param_trans['shd'] = {'alpha1':('nexp',0,0,-3,3,'none'),
+                              'alpha2':('nexp',0,0,-3,3,'none')}
+        param_trans[0] = {'w':('exp',0,0,-10,10,'dirichlet',a_dirichlet),
+                          'fD': ('logit_scaled', 0,1, -10,10,'logistic'),
+                          'alpha3':('nexp',0,0,-10,10,'none'),
+                          'hz': ('logit_scaled', 0,  1.2,-10,10,'logistic')}
+        param_trans[1] = {'w':('exp',0,0,-10,10,'dirichlet',a_dirichlet),
+                          'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
+                          'alpha3':('nexp',0,0,-10,10,'none'),
+                          'hz': ('logit_scaled', 1.2,3,-10,10,'logistic')}
+        param_trans[2] = {'w':('exp',0,0,-10,10,'dirichlet',a_dirichlet),
+                          'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
+                          'alpha3':('nexp',0,0,-10,10,'none'),
+                          'hz': ('logit_scaled', 3,  7.3,-10,10,'logistic')}
+
+        fid_pars['free_pars'][0] = ['w', 'hz', 'fD']
+        fid_pars['free_pars'][1] = ['w', 'hz', 'fD']
+        fid_pars['free_pars'][2] = ['w', 'hz', 'fD']
+        fid_pars['free_pars']['shd'] = ['alpha1', 'alpha2']
+        ndim=np.sum([len(fid_pars['free_pars'][key]) for key in fid_pars['free_pars'].keys()])
+
+        fid_pars['priors'] = {}
+        params_i = 0
+        for cmpt in np.arange(fid_pars['ncomponents']).tolist()+['shd',]:
+            fid_pars['priors'][cmpt]={};
+            for par in fid_pars['free_pars'][cmpt]:
+                fid_pars['priors'][cmpt][par] = param_trans[cmpt][par][5:]
+                params_i += 1;
+
+        p0 = np.array( [transformations.logit(np.random.rand()),transformations.logit(np.random.rand()),-np.random.rand()*1,
+                        transformations.logit(np.random.rand()),transformations.logit(np.random.rand()),-np.random.rand()*1,
+                        transformations.logit(np.random.rand()),transformations.logit(np.random.rand()),-np.random.rand()*1,
+                        -np.random.rand()*1,-np.random.rand()*1] )
+
+        model = lambda x: dh_msto.model_prior(x, fid_pars=fid_pars, grad=False)
+        grad = lambda x: dh_msto.model_prior(x, fid_pars=fid_pars, grad=True)[1]
+        scipy.optimize.approx_fprime(p0, model, 1e-8), grad(p0)
+        self.assertAlmostEqual( grad(p0), scipy.optimize.approx_fprime(np.array([p0]), model, 1e-12), 8)
+
 
 if __name__ == '__main__':
     unittest.main()
