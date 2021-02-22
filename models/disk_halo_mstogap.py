@@ -788,6 +788,85 @@ def model_prior(params, fid_pars=None, grad=False, bounds=None):
     elif grad: return logprior, logprior_grad
 
 
+#%% Model Distribution
+def z_component_models(z, hz=1., R0=8.27, component=None):
+    if component=='disk':
+        norm = 1/(2*hz**3)
+        dist = np.exp(-z/hz)
+    elif component=='halo':
+        norm = 4*scipy.special.gamma(hz/2)/(R0**3 * np.sqrt(np.pi) * scipy.special.gamma((hz-3)/2))
+        dist = ((z**2)/(R0**2) + 1)**(-hz/2)
+
+    return norm*dist
+
+def z_model(z, params, fid_pars=None, model='combined'):
+
+    # Input Parameters
+    ncomponents=fid_pars['ncomponents']
+    transformed_params = combined_params(params, fid_pars, ncomponents=ncomponents)
+
+    dist_cmpts = np.zeros((len(z), ncomponents))
+    weights = np.zeros(ncomponents)
+    for j in range(ncomponents):
+        dist_cmpts[:,j] = z_component_models(z, hz=transformed_params[j]['hz'], R0=fid_pars['R0'], component=fid_pars['components'][j])
+        weights[j] = transformed_params[j]['w']
+
+    if model=='combined': return  z**2 * np.sum(weights*dist_cmpts, axis=1)
+    elif model=='all':    return (z**2 *       (weights*dist_cmpts).T).T
+
+def M_model(M, params, fid_pars=None, model='combined'):
+
+    # Input Parameters
+    ncomponents=fid_pars['ncomponents']
+    transformed_params = combined_params(params, fid_pars, ncomponents=ncomponents)
+
+    dist_cmpts = np.zeros((len(M), ncomponents))
+    weights = np.zeros(ncomponents)
+    for j in range(ncomponents):
+        alpha1=transformed_params[j]['alpha1']; alpha2=transformed_params[j]['alpha2']; alpha3=transformed_params[j]['alpha3']
+        Mms=transformed_params[j]['Mms']; Mms1=transformed_params[j]['Mms1']; Mms2=transformed_params[j]['Mms2']; Mto=transformed_params[j]['Mto'];
+        fD=transformed_params[j]['fD']; Mx=fid_pars['Mmax']
+
+        ep1=1.3; ep2=2.3;
+        a1=-np.log(10)*(ep1-1)/(2.5*alpha1); a2=-np.log(10)*(ep2-1)/(2.5*alpha2);
+
+        alphag = (np.log(a1/a2) - alpha1*(Mms-Mms1) + alpha2*(Mms-Mms2))/(Mms1-Mms2)
+        Ag = 1/a1 * np.exp((alpha1-alphag)*(Mms-Mms1))
+
+        # Latent variables
+        n1 = -(4 + alpha1*5/np.log(10))
+        ng = -(4 + alphag*5/np.log(10))
+        n2 = -(4 + alpha2*5/np.log(10))
+        n3 = -(4 + alpha3*5/np.log(10))
+
+        pop1 = M>Mms1
+        popg = M>Mms2
+        pop2 = M>Mto
+
+        log_Ams = np.log( fD*a1*a2 ) - \
+                  scipy.special.logsumexp(np.array([alpha1*(Mms-Mms1), alpha1*(Mms-Mx),
+                                                    alpha1*(Mms-Mms1)+alphag*(Mms1-Mms2), alpha1*(Mms-Mms1),
+                                                    alpha2*(Mms-Mto), alpha2*(Mms-Mms2)]),
+                                        b=np.array([a2/alpha1, -a2/alpha1,
+                                                    a2/alphag, -a2/alphag,
+                                                    a1/alpha2, -a1/alpha2]))
+        log_AG = np.log(-alpha3) + np.log(1-fD)
+
+        log_m = np.where(pop1, log_Ams - np.log(a1) + alpha1*(Mms-M),
+                np.where(popg, log_Ams + np.log(Ag) + alphag*(Mms-M),
+                np.where(pop2, log_Ams - np.log(a2) + alpha2*(Mms-M),
+                               log_AG  + alpha3*(Mto-M))))
+
+        m_dist = np.exp(log_m)
+        m_dist[M>fid_pars['Mmax']]=0.
+        dist_cmpts[:,j] = m_dist
+
+        weights[j] = transformed_params[j]['w']
+
+    if model=='combined': return  np.sum(weights*dist_cmpts, axis=1)
+    elif model=='all':    return        (weights*dist_cmpts)
+
+
 #%% Unit Tests
 import unittest, tqdm
 
