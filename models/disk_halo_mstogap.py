@@ -270,6 +270,7 @@ def logmodel_perr_grad(sample, params, gmm=None, fid_pars=None, grad=False):
 
     sumcmpts = np.exp(logsumcmpts)
 
+
     grad_model = np.zeros((len(params), len(pi_mu)))
     params_i = 0
     reweight = (weights * np.exp(logcmpts)).T/sumcmpts
@@ -282,9 +283,13 @@ def logmodel_perr_grad(sample, params, gmm=None, fid_pars=None, grad=False):
             if par=='w': grad_model[params_i] = np.exp(logcmpts[:,j])/sumcmpts
             params_i+=1
     for par in fid_pars['free_pars']['shd']:
-        if par=='alpha1': grad_model[params_i] = np.sum(grad_lambda[4,:,:] * weights * np.exp(logcmpts), axis=1)/sumcmpts
-        if par=='alpha2': grad_model[params_i] = np.sum(grad_lambda[5,:,:] * weights * np.exp(logcmpts), axis=1)/sumcmpts
+        # if par=='alpha1': grad_model[params_i] = np.sum(grad_lambda[4,:,:].copy() * weights * np.exp(logcmpts), axis=1)/sumcmpts
+        # if par=='alpha2': grad_model[params_i] = np.sum(grad_lambda[5,:,:].copy() * weights * np.exp(logcmpts), axis=1)/sumcmpts
+        if par=='alpha1': grad_model[params_i] = np.sum(grad_lambda[4,:,:].copy() * reweight.T, axis=1)
+        if par=='alpha2': grad_model[params_i] = np.sum(grad_lambda[5,:,:].copy() * reweight.T, axis=1)
         params_i+=1
+
+    #print((grad_lambda[4,:,:] * weights * np.exp(logcmpts)).shape)
 
     jacobian = jacobian_params(params, fid_pars, ncomponents=ncomponents)
 
@@ -424,7 +429,7 @@ def log_expmodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., 
     # alpha1
     dalphag_dalpha1 = (-1/alpha1 - (Mms-Mms1))/(Mms1-Mms2)
     dlnAms_dalpha1 = -1/alpha1 - np.sum(b_alpha1*np.exp(Ams_exponent))*Ams/(fD*a1*a2)
-    grad_lambda[:,4] = (dlnAms_dalpha1 * np.sum(p_model[1:]*np.exp(Mag_norm[1:])) \
+    grad_lambda[:,4] = (dlnAms_dalpha1 * np.sum(p_model[1:]*np.exp(Mag_norm[1:]), axis=0) \
                         + (np.exp(Mag_norm[3]) * ((1/alpha1 + (Mms+10-m_mu)) * p_model[3] \
                                                 - 5/ln10 * dp_model_dn[3]) \
                         +  np.exp(Mag_norm[2]) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)) * p_model[2] \
@@ -432,7 +437,7 @@ def log_expmodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., 
     # alpha2
     dalphag_dalpha2 = (1/alpha2 + (Mms-Mms2))/(Mms1-Mms2)
     dlnAms_dalpha2 = -1/alpha2 - np.sum(b_alpha2*np.exp(Ams_exponent))*Ams/(fD*a1*a2)
-    grad_lambda[:,5] = (dlnAms_dalpha2 * np.sum(p_model[1:]*np.exp(Mag_norm[1:])) \
+    grad_lambda[:,5] = (dlnAms_dalpha2 * np.sum(p_model[1:]*np.exp(Mag_norm[1:]), axis=0) \
                         + (np.exp(Mag_norm[1]) * ((1/alpha2 + (Mms+10-m_mu)) * p_model[1] \
                                                 - 5/ln10 * dp_model_dn[1]) \
                         +  np.exp(Mag_norm[2]) * (dalphag_dalpha2*(Mms1+10-m_mu) * p_model[2] \
@@ -607,7 +612,7 @@ def log_halomodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1.,
     # alpha1
     dalphag_dalpha1 = (-1/alpha1 - (Mms-Mms1))/(Mms1-Mms2)
     dlnAms_dalpha1 = -1/alpha1 - np.sum(b_alpha1*np.exp(Ams_exponent))*Ams/(fD*a1*a2)
-    grad_lambda[:,4] = (dlnAms_dalpha1 * np.sum(p_model[1:]*np.exp(Mag_norm[1:])) \
+    grad_lambda[:,4] = (dlnAms_dalpha1 * np.sum(p_model[1:]*np.exp(Mag_norm[1:]), axis=0) \
                         + (np.exp(Mag_norm[3]) * ((1/alpha1 + (Mms+10-m_mu)) * p_model[3] \
                                                 - 5/ln10 * dp_model_dn[3]) \
                         +  np.exp(Mag_norm[2]) * ((1/alpha1 + (Mms-Mms1)+dalphag_dalpha1*(Mms1+10-m_mu)) * p_model[2] \
@@ -615,7 +620,7 @@ def log_halomodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1.,
     # alpha2
     dalphag_dalpha2 = (1/alpha2 + (Mms-Mms2))/(Mms1-Mms2)
     dlnAms_dalpha2 = -1/alpha2 - np.sum(b_alpha2*np.exp(Ams_exponent))*Ams/(fD*a1*a2)
-    grad_lambda[:,5] = (dlnAms_dalpha2 * np.sum(p_model[1:]*np.exp(Mag_norm[1:])) \
+    grad_lambda[:,5] = (dlnAms_dalpha2 * np.sum(p_model[1:]*np.exp(Mag_norm[1:]), axis=0) \
                         + (np.exp(Mag_norm[1]) * ((1/alpha2 + (Mms+10-m_mu)) * p_model[1] \
                                                 - 5/ln10 * dp_model_dn[1]) \
                         +  np.exp(Mag_norm[2]) * (dalphag_dalpha2*(Mms1+10-m_mu) * p_model[2] \
@@ -706,11 +711,11 @@ def combined_params(params, fid_pars, ncomponents=1, transform=True):
     params_i = 0
     for j in range(ncomponents):
         output_pars[j]={}
+        for par in fid_pars['fixed_pars'][j].keys():
+            output_pars[j][par]=fid_pars['fixed_pars'][j][par]
         for par in fid_pars['free_pars'][j]:
             if transform: output_pars[j][par]=fid_pars['functions'][j][par](params[params_i]); params_i += 1;
             else: output_pars[j][par]=params[params_i]; params_i += 1;
-        for par in fid_pars['fixed_pars'][j].keys():
-            output_pars[j][par]=fid_pars['fixed_pars'][j][par]
     for par in fid_pars['free_pars']['shd']:
         for j in range(ncomponents):
             if transform: output_pars[j][par]=fid_pars['functions']['shd'][par](params[params_i])
@@ -731,14 +736,126 @@ def jacobian_params(params, fid_pars, ncomponents=1, transform=True):
     for j in range(ncomponents):
         for par in fid_pars['free_pars'][j]:
             if transform: jacobian[params_i]=fid_pars['jacobians'][j][par](fid_pars['functions'][j][par](params[params_i])); params_i += 1;
-            else: params_i += 1;
+            else: jacobian[params_i]=params[params_i]; params_i += 1;
     for par in fid_pars['free_pars']['shd']:
-        for j in range(ncomponents):
-            if transform: jacobian[params_i]=fid_pars['jacobians'][j][par](fid_pars['functions'][j][par](params[params_i]))
-            else: jacobian[params_i]=params[params_i]
+        if transform: jacobian[params_i]=fid_pars['jacobians']['shd'][par](fid_pars['functions']['shd'][par](params[params_i]))
+        else: jacobian[params_i]=params[params_i]
         params_i += 1
 
     return jacobian
+
+#%% Priors
+############### ----------------- PRIOR ----------------------####################
+
+def model_prior(params, fid_pars=None, j=None, grad=False):
+
+    logistic = lambda x: -x - 2*np.log(1+np.exp(-x))
+    logistic_grad = lambda x: (1-np.exp(x))/(1+np.exp(x))
+    params_i = 0
+
+    #jacobian = jacobian_params(params, fid_pars, ncomponents=fid_pars['ncomponents'])
+
+    dir_a = 2
+
+    # Input Parameters
+    ncomponents=fid_pars['ncomponents']
+    untrans_params = combined_params(params, fid_pars, ncomponents=ncomponents, transform=False)
+    trans_params = combined_params(params, fid_pars, ncomponents=ncomponents, transform=True)
+
+    total_weight = np.sum([trans_params[j]['w'] for j in range(ncomponents)])
+
+    logprior = 0.
+    for j in range(ncomponents):
+        # Logistic
+        for key in ['fD', 'Mms', 'Mms1', 'Mms2', 'Mto']:
+            logprior += logistic(untrans_params[j][key])
+        # Dirichlet
+        logprior += (dir_a-1)*np.log(trans_params[j]['w']/total_weight)
+
+
+    if grad:
+        logprior_grad = np.zeros(len(params))
+        for j in range(ncomponents):
+            for par in fid_pars['free_pars'][j]:
+                if par in ('fD', 'Mto'): logprior_grad[params_i] = logistic_grad(untrans_params[j][par])
+                elif par in ('w'): logprior_grad[params_i] = (dir_a-1)*( 1 - ncomponents*np.exp(untrans_params[j]['w'])/total_weight )
+                params_i+=1
+        for par in fid_pars['free_pars']['shd']:
+            if par in ('fD', 'Mto'): logprior_grad[params_i] = logistic_grad(untrans_params['shd'][par])
+            params_i+=1
+
+    if not grad:
+        if np.isnan(logprior): return -1e30
+        return logprior
+
+    elif grad:
+        if np.isnan(logprior): return -1e30, np.zeros(len(params))-1e30
+        return logprior, logprior_grad
+
+# def model_prior(params, fid_pars=None, j=None, grad=False):
+#
+#     logistic = lambda x: -x - 2*np.log(1+np.exp(-x))
+#     logistic_grad = lambda x: (1-np.exp(x))/(1+np.exp(x))
+#     params_i = 0
+#
+#     #jacobian = jacobian_params(params, fid_pars, ncomponents=fid_pars['ncomponents'])
+#
+#     dir_a = 2
+#
+#     if j is None:
+#         # Input Parameters
+#         ncomponents=fid_pars['ncomponents']
+#         untrans_params = combined_params(params, fid_pars, ncomponents=ncomponents, transform=False)
+#         trans_params = combined_params(params, fid_pars, ncomponents=ncomponents, transform=True)
+#
+#         total_weight = np.sum([trans_params[j]['w'] for j in range(ncomponents)])
+#
+#         logprior = 0.
+#         for j in range(ncomponents):
+#             # Logistic
+#             for key in ['fD', 'Mms', 'Mms1', 'Mms2', 'Mto']:
+#                 logprior += logistic(untrans_params[j][key])
+#             # Dirichlet
+#             logprior += (dir_a-1)*np.log(trans_params[j]['w']/total_weight)
+#             # logprior += (dir_a-1)*( np.log(trans_params[j]['w']) )#-np.log(total_weight) )
+#
+#
+#         if grad:
+#             logprior_grad = np.zeros(len(params))
+#             for j in range(ncomponents):
+#                 for par in fid_pars['free_pars'][j]:
+#                     if par in ('fD', 'Mto'): logprior_grad[params_i] = logistic_grad(untrans_params[j][par])
+#                     elif par in ('w'): logprior_grad[params_i] = (dir_a-1)*( 1 - ncomponents*np.exp(untrans_params[j]['w'])/total_weight )
+#                     params_i+=1
+#             for par in fid_pars['free_pars']['shd']:
+#                 if par in ('fD', 'Mto'): logprior_grad[params_i] = logistic_grad(untrans_params['shd'][par])
+#                 params_i+=1
+#
+#     else:
+#         # Input Parameters
+#         ncomponents=fid_pars['ncomponents']
+#         untrans_params = component_params(params, j, fid_pars, transform=False)
+#         trans_params = component_params(params, j, fid_pars, transform=True)
+#
+#         logprior = 0.
+#         for key in ['fD', 'Mms', 'Mms1', 'Mms2', 'Mto']:
+#             logprior += logistic(untrans_params[key])
+#         #logprior += (dir_a-1)*np.log(trans_params['w'])
+#
+#
+#         if grad:
+#             logprior_grad = np.zeros(len(params))
+#             for par in fid_pars['free_pars'][j]:
+#                 if par in ('fD', 'Mto'): logprior_grad[params_i] = logistic_grad(untrans_params[par])
+#                 #elif par in ('w'): logprior_grad[params_i] = (dir_a-1)/trans_params['w']
+#                 params_i+=1
+#
+#     if not grad:
+#         if np.isnan(logprior): return -1e30
+#         return logprior
+#
+#     elif grad:
+#         return logprior, logprior_grad
 
 
 #%% Unit Tests
