@@ -142,13 +142,13 @@ if __name__=='__main__':
     if os.path.exists(savefile): raise ValueError('File: %s already exists!' % savefile)
 
     nsteps=100; ncores=2;
-    n_newtoncg=2
+    n_newtoncg=10
 
     # output dictionary:
     output = {}
 
     # Load Sample
-    size = 1000
+    size = 5000
     sample = {}; true_pars={}; latent_pars={};
     filename = '/data/asfe2/Projects/mwtrace_data/mockmodel/sample.h'
     with h5py.File(filename, 'r') as hf:
@@ -243,7 +243,7 @@ if __name__=='__main__':
         print('Gaia SF fit, no error:')
         sample_2d = np.vstack((1/sample['s'], np.log(1/sample['s']),
                                  sample['sinb'], np.log(np.sqrt(1-sample['sinb']**2)),
-                                 sample['m']))
+                                 sample['m'])).T[sample['gaiasf_subset']].T
         fid_pars['models']=[dh_msto.log_expmodel_grad, dh_msto.log_expmodel_grad, dh_msto.log_halomodel_grad]
         poisson_kwargs_global = {'sample':sample_2d,
                                  'logmodel': dh_msto.logmodel_grad, 'model_integrate':dh_msto.integral_model_gaiaSF_grad,

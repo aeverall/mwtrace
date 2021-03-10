@@ -2,4 +2,4 @@
 *.pdf
 *.pyc
 *ipynb_checkpoints*
-
+*test*
