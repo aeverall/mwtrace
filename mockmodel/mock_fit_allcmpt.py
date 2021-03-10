@@ -176,12 +176,14 @@ if __name__=='__main__':
     fid_pars['free_pars'][2] = ['w', 'hz']
     fid_pars['free_pars']['shd'] = ['alpha1', 'alpha2']
 
-    fid_pars['fixed_pars'][0] = {'Mms':true_pars['Mms'], 'fD':1.-1e-15, 'alpha3':true_pars['0']['alpha3'],
+    fid_pars['fixed_pars'][0] = {'Mms':true_pars['Mms'], 'fD':true_pars['0']['fD'], 'alpha3':true_pars['0']['alpha3'],
                                  'Mms1':true_pars['Mms1'], 'Mms2':true_pars['Mms2'],
                                  'Mto':true_pars['0']['Mto']}
     fid_pars['fixed_pars'][1] = copy(fid_pars['fixed_pars'][0]); fid_pars['fixed_pars'][2] = copy(fid_pars['fixed_pars'][0])
     fid_pars['fixed_pars'][1]['Mto'] = true_pars['1']['Mto']
+    fid_pars['fixed_pars'][1]['fD'] = true_pars['1']['fD']
     fid_pars['fixed_pars'][2]['Mto'] = true_pars['2']['Mto']
+    fid_pars['fixed_pars'][2]['fD'] = true_pars['2']['fD']
 
     fid_pars['functions']={}; fid_pars['functions_inv']={}; fid_pars['jacobians']={}; bounds=[]
     params_i = 0
