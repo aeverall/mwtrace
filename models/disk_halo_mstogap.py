@@ -760,8 +760,8 @@ def integral_model_gaiaSF_grad(params, bins=None, fid_pars=None, gsftest=None, t
             if par=='w': integral_grad[params_i] = integralcmpts[j]
             params_i+=1
     for par in fid_pars['free_pars']['shd']:
-        if par=='alpha1': integral_grad[params_i] += integralcmpts_grad[j,4]
-        if par=='alpha2': integral_grad[params_i] += integralcmpts_grad[j,5]
+        if par=='alpha1': integral_grad[params_i] = np.sum(integralcmpts_grad[:,4])
+        if par=='alpha2': integral_grad[params_i] = np.sum(integralcmpts_grad[:,5])
         params_i+=1
 
     jacobian = jacobian_params(params, fid_pars, ncomponents=ncomponents)
