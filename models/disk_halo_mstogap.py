@@ -1217,13 +1217,29 @@ def model_prior(params, fid_pars=None, grad=False, bounds=None):
         if grad: logprior_grad[params_i] += prior_gradients[prior_args[0]](params[params_i], *prior_args[1:])
         params_i += 1;
 
-    unbound = (params<=bounds[0])|(params>=bounds[1])
-    if np.sum(unbound)>0:
-        if not grad: return -1e30
-        else: return -1e30, np.zeros(len(params))
+    boundary_prior = exponent_tophat(params, bounds, grad=grad, dropoff=1e10)
+    # unbound = (params<=bounds[0])|(params>=bounds[1])
+    # if np.sum(unbound)>0:
+    #     if not grad: return -1e30
+    #     else: return -1e30, np.zeros(len(params))
 
-    if not grad: return logprior
-    elif grad: return logprior, logprior_grad
+    if not grad: return logprior+boundary_prior
+    elif grad: return logprior + boundary_prior[0], logprior_grad + boundary_prior[1]
+
+def exponent_tophat(x, bounds, grad=False, dropoff=1e10):
+
+    d_lower =  (x-bounds[0]) * dropoff
+    d_upper = -(x-bounds[1]) * dropoff
+
+    prior = np.where(x<bounds[0], d_lower,
+            np.where(x>bounds[1], d_upper, 0.))
+
+    if not grad: return np.sum(prior)
+
+    prior_grad = np.where(x<bounds[0],  dropoff,
+                 np.where(x>bounds[1], -dropoff, 0.))
+
+    return np.sum(prior), prior_grad
 
 
 #%% Model Distribution

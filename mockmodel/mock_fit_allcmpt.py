@@ -1,3 +1,93 @@
+%load_ext autoreload
+%autoreload 2
+
+import sys, os, pickle, time, warnings, h5py
+
+import numpy as np, pandas as pd, scipy, scipy.stats as stats, tqdm, h5py, emcee
+from copy import deepcopy as copy
+
+from multiprocessing import Pool
+
+# Plotting modules
+import matplotlib
+from pylab import cm
+import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
+plt.rc('text', usetex=True)
+plt.rc('font', family='serif')
+plt.rc('axes', labelsize=16)
+plt.rc('xtick',labelsize=16)
+plt.rc('ytick',labelsize=16)
+plt.rc('legend',fontsize=16)
+plt.rc('font',size=16)
+
+sys.path.extend(['../utilities/', '../models/'])
+import samplers, disk_cone_plcut as dcp, plotting, transformations, sf_utils
+from transformations import func_inv_jac, func_labels, label_dict
+
+import disk_halo_mstogap as dh_msto
+from transformations import func_inv_jac
+
+
+
+if __name__=='__main__':
+    # Load Sample
+    size = 5000
+    sample = {}; true_pars={}; latent_pars={};
+
+    filename="/data/asfe2/Projects/mwtrace_data/mockmodel/sample.h"
+    with h5py.File(filename, 'r') as hf:
+        subset = (hf['sample']['m'][...]>0)&(hf['sample']['m'][...]<33)
+        print('%d/%d' % (np.sum(subset), len(subset)))
+        subsample  = np.sort(np.random.choice(np.arange(np.sum(subset)), size=size, replace=False))
+        for key in hf['sample'].keys():
+            sample[key]=hf['sample'][key][...][subset][subsample]
+        # Get true parameters
+        for key in hf['true_pars'].keys():
+            if not key in np.arange(3).astype(str):
+                true_pars[key]=hf['true_pars'][key][...]
+            else:
+                true_pars[key]={}
+                for par in hf['true_pars'][key].keys():
+                    true_pars[key][par]=hf['true_pars'][key][par][...]
+    for j in range(3): true_pars[str(j)]['w']*=size
+
+    # Apply Gaia Selection Function
+    print(sample.keys())
+    sample['gaiasf_subset'] = sf_utils.apply_gaiasf(sample['l'], np.arcsin(sample['sinb']), sample['m'])[0]
+
+    true_pars = true_pars
+    sample = sample
+
+    # Load class instance
+    from TracerFit import mwfit
+
+    free_pars = {}
+    free_pars[0] = ['w', 'hz']
+    free_pars[1] = ['w', 'hz']
+    free_pars[2] = ['w', 'hz']
+    free_pars['shd'] = ['alpha1', 'alpha2']
+
+
+    model_full = mwfit(free_pars=free_pars, fixed_pars=true_pars, sample=sample, sf_bool=True, perr_bool=False)
+    model_full.tqdm = tqdm.tqdm_notebook
+    model_full._generate_fid_pars()
+    model_full._generate_kwargs()
+    model_full.sample_prior()
+    model_full.prior_flatchain[0]
+
+
+
+
+
+
+
+
+
+
+
+
+
 import sys, os, pickle, time, warnings
 
 import numpy as np, pandas as pd, scipy, scipy.stats as stats, tqdm, h5py, emcee

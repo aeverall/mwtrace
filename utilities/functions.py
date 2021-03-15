@@ -236,12 +236,12 @@ def get_roots_ridder_hm(coeffs, b=None):
 
     return roots
 
-@njit
+#@njit
 def get_fooroots_ridder_hm(func, b=None, a=None, args=None):
     # hm stands for homemade
     roots = np.zeros(len(args[0])) + np.nan
     for i in range(len(args[0])):
-        args_i = [arg[i] for arg in args]
+        args_i = tuple([arg[i] for arg in args])
         if a is None:
             if False: roots[i] = ridders_algo(func, 0., b[i], args=args_i)
             if True: roots[i]=bisect_algo(func, 0., b[i], args=args_i)

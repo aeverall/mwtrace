@@ -53,15 +53,12 @@ def run_mcmc(p0, poisson_kwargs, nstep=1000, ncores=1):
 
     return sampler
 
-def run_mcmc_global(p0, poisson_like, bounds, nstep=1000, ncores=1, notebook=False, initialise=True):
+def run_mcmc_global(p0, poisson_like, bounds, nstep=1000, ncores=1, tqdm_foo=tqdm.tqdm, initialise=True):
     """
     run_mcmc_global: emcee with poisson_kwargs defined globally.
     Data is not passed back and forth but is always called as a global argument.
     Leads to large performance increase for big datasets
     """
-
-    if notebook: tqdm_foo = tqdm.tqdm_notebook
-    else: tqdm_foo = tqdm.tqdm
 
     ndim=p0.shape[0]
 
