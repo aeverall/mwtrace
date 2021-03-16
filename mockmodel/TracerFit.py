@@ -11,10 +11,8 @@ from multiprocessing import Pool, Array
 sys.path.extend(['../utilities/', '../models/'])
 import samplers, disk_cone_plcut as dcp, plotting, transformations, sf_utils
 import disk_halo_mstogap as dh_msto
-from transformations import func_inv_jac
+from transformations import func_inv_jac, func_labels, label_dict
 from functools import partial
-
-
 
 global poisson_kwargs_global
 poisson_kwargs_global = {}
@@ -90,7 +88,7 @@ class mwfit():
 
         return res
 
-    def optimize_parallel(self, niter=1, p0=None, idxs_prior=None, method='Newton-CG', ncores=1, label='_', verbose=False, **model_kwargs):
+    def optimize_parallel(self, niter=1, p0=None, idxs_prior=None, method='Newton-CG', ncores=1, label='_', verbose=False, disp=False, **model_kwargs):
 
         if p0 is None:
             if idxs_prior is None:
@@ -115,8 +113,7 @@ class mwfit():
         result = np.zeros((niter, len(p0[0][1]))); lnprob = np.zeros(niter); i=0
         kwargs = {}
         with Pool(ncores) as pool:
-            for res in pool.imap(partial(maximize, p0_idx=True, method=method, jac=True, options={'disp': verbose}, callback=printx_set), p0):
-                print(i)
+            for res in pool.imap(partial(maximize, p0_idx=True, verbose=verbose, method=method, jac=True, options={'disp': disp}, callback=printx_set), p0):
                 result[i] = res['x']
                 lnprob[i] = -res['fun']
                 i+=1
@@ -174,19 +171,23 @@ class mwfit():
     def _generate_fid_pars(self):
 
         fid_pars = {'Mmax':self.fixed_pars['Mx'],  'lat_min':np.deg2rad(self.fixed_pars['theta_deg']), 'R0':self.fixed_pars['R0'],
-                    'free_pars':{}, 'fixed_pars':{}, 'functions':{}, 'functions_inv':{}, 'jacobians':{}, 'w':True,
+                    'free_pars':{}, 'fixed_pars':{par:self.fixed_pars[par] for par in ['Mx','theta_deg','R0']},
+                    'functions':{}, 'functions_inv':{}, 'jacobians':{}, 'w':True,
                     'components':self.components, 'ncomponents':len(self.components)}
 
         fid_pars['free_pars'] = self.free_pars
-
-        fid_pars['fixed_pars'][0] = {'Mms':self.fixed_pars['Mms'], 'fD':self.fixed_pars['0']['fD'], 'alpha3':self.fixed_pars['0']['alpha3'],
-                                     'Mms1':self.fixed_pars['Mms1'], 'Mms2':self.fixed_pars['Mms2'],
-                                     'Mto':self.fixed_pars['0']['Mto']}
-        fid_pars['fixed_pars'][1] = copy(fid_pars['fixed_pars'][0]); fid_pars['fixed_pars'][2] = copy(fid_pars['fixed_pars'][0])
-        fid_pars['fixed_pars'][1]['Mto'] = self.fixed_pars['1']['Mto']
-        fid_pars['fixed_pars'][1]['fD'] = self.fixed_pars['1']['fD']
-        fid_pars['fixed_pars'][2]['Mto'] = self.fixed_pars['2']['Mto']
-        fid_pars['fixed_pars'][2]['fD'] = self.fixed_pars['2']['fD']
+        fid_pars['fixed_pars'] = self.fixed_pars
+        for j in range(len(self.components)):
+            for par in ['Mms', 'Mms1', 'Mms2']:
+                fid_pars['fixed_pars'][j][par]=self.fixed_pars[par]
+        # fid_pars['fixed_pars'][0] = {'Mms':self.fixed_pars['Mms'], 'fD':self.fixed_pars[0]['fD'], 'alpha3':self.fixed_pars[0]['alpha3'],
+        #                              'Mms1':self.fixed_pars['Mms1'], 'Mms2':self.fixed_pars['Mms2'],
+        #                              'Mto':self.fixed_pars[0]['Mto']}
+        # fid_pars['fixed_pars'][1] = copy(fid_pars['fixed_pars'][0]); fid_pars['fixed_pars'][2] = copy(fid_pars['fixed_pars'][0])
+        # fid_pars['fixed_pars'][1]['Mto'] = self.fixed_pars[1]['Mto']
+        # fid_pars['fixed_pars'][1]['fD'] = self.fixed_pars[1]['fD']
+        # fid_pars['fixed_pars'][2]['Mto'] = self.fixed_pars[2]['Mto']
+        # fid_pars['fixed_pars'][2]['fD'] = self.fixed_pars[2]['fD']
 
         fid_pars['functions']={}; fid_pars['functions_inv']={}; fid_pars['jacobians']={}; bounds=[]
         params_i = 0
@@ -291,6 +292,47 @@ class mwfit():
 
         self.save_hdf5(self.output, filename, mode=mode)
 
+    def load_hdf5_recurrent(self, path, hf):
+        output={}
+
+        for key in hf[path].keys():
+            if isinstance(hf[os.path.join(path,key)], h5py._hl.group.Group):
+                output[int_idx(key)] = self.load_hdf5_recurrent(os.path.join(path,key), hf)
+            else:
+                output[int_idx(key)] = hf[os.path.join(path,key)][...]
+
+        return output
+
+    def load(self, filename, mode='r'):
+
+        data = {}
+        with h5py.File(filename, 'r') as hf:
+            for key in hf.keys():
+                if isinstance(hf[key], h5py._hl.group.Group):
+                    data[int_idx(key)] = self.load_hdf5_recurrent(key, hf)
+                else: data[int_idx(key)] = hf[key][...]
+
+        for cmpt in data['param_trans'].keys():
+            for par in data['param_trans'][cmpt].keys():
+                data['param_trans'][cmpt][par] = data['param_trans'][cmpt][par].astype('U20').tolist()
+                for i in [1,2,3,4]:
+                    data['param_trans'][cmpt][par][i] = float(data['param_trans'][cmpt][par][i])
+        for cmpt in data['free_pars'].keys():
+            data['free_pars'][cmpt] = data['free_pars'][cmpt].astype('U20')
+
+        for key in ['fixed_pars', 'param_trans', 'source_id', 'true_pars', 'free_pars']:
+            self.__dict__[key] = data[key]
+
+        for par in ['Mms','Mms1','Mms2']:
+            self.fixed_pars[par] = self.fixed_pars[0][par]
+
+        self.optimize_results = data['optimize']
+        self.mcmc_results = data['mcmc']
+
+        self.sample={}
+        self.sample['source_id'] = data['source_id']
+
+
     def get_true_params(self, true_pars):
 
         """ true_pars dict -> true_params array of free parameters (untransformed). """
@@ -298,7 +340,7 @@ class mwfit():
         true_params=[];
         for j in range(self.fid_pars['ncomponents']):
             for par in self.fid_pars['free_pars'][j]:
-                true_params += [true_pars[str(j)][par],]
+                true_params += [true_pars[j][par],]
         for par in self.fid_pars['free_pars']['shd']:
             true_params += [true_pars[par],]
         true_params=np.array(true_params)
@@ -326,6 +368,13 @@ class mwfit():
 
         return params_f
 
+    def get_labels(self):
+
+        labels=[]; 
+        for cmpt in np.arange(len(self.components)).tolist()+['shd',]:
+            for par in self.free_pars[cmpt]:
+                labels+=[func_labels[self.param_trans[cmpt][par][0]](label_dict[par], *self.param_trans[cmpt][par][1:3]),]
+        return labels
 
 def nloglikelihood(x, id=-1):
     # Negative log likelihood and gradient for Newton-CG
@@ -335,10 +384,14 @@ def nloglikelihood(x, id=-1):
         opt_id=id
     return -lnl, -grad
 
-def maximize(p0, p0_idx=False, **kwargs):
+def maximize(p0, p0_idx=False, verbose=False, **kwargs):
     if p0_idx: id=p0[0]; p0=p0[1];
     else: id=-1
     res = scipy.optimize.minimize(nloglikelihood, p0, **kwargs, args=(id))
+
+    if verbose:
+        print('\n', res['message'], 'nit=%d'%res['nit'], 'njev=%d'%res['njev'], 'nfev=%d'%res['nfev'])
+
     return res
 
 
@@ -366,6 +419,11 @@ def poisson_like(params, bounds=None, grad=False):
         model_grad = np.sum(obj[1], axis=1) - integral[1] + prior[1]
         return model_val, model_grad
 
+def int_idx(i):
+    if i in np.arange(10).astype(str):
+        return int(i)
+    else: return i
+
 ##Print callback function
 def printx(Xi):
     global Nfeval
@@ -375,5 +433,5 @@ def printx_set(Xi):
     global opt_id
     fout[opt_id] = poisson_like(Xi)
     Nfeval[opt_id] += 1
-    sys.stdout.write(', '.join(['{0}:{1:.5e}'.format(np.array(Nfeval)[i],np.array(fout)[i]) for i in range(len(np.array(Nfeval)))])+'\r')
+    sys.stdout.write(', '.join(['{0}:{1:.5e}'.format(np.array(Nfeval)[i],np.array(fout)[i]) for i in range(len(np.array(Nfeval)))])+'       \r')
     sys.stdout.flush()

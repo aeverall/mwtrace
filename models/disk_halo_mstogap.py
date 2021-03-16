@@ -362,7 +362,7 @@ def log_expmodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., 
         a = p_min[~legendre]; b = p_max[~legendre]
 
         args = (beta[~legendre], n*np.ones(len(pi_mu[~legendre])), pi_mu[~legendre], pi_err[~legendre], a, b)
-        p_mode = functions.get_fooroots_ridder_hm(expmodel_perr_logit_grad, a=a+1e-15, b=b, args=args)
+        p_mode = functions.get_fooroots_ridder_hm(expmodel_perr_logit_grad, a=a+1e-15, b=b, args=np.array(args))
 
         curve = expmodel_perr_d2logIJ_dp2(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
                                     functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
@@ -390,7 +390,7 @@ def log_expmodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., 
         n = Mag_n[ii]-1
         # Gauss - Hermite Quadrature
         args = (beta, n*np.ones(len(pi_mu)), pi_mu, pi_err, a, b)
-        p_mode = functions.get_fooroots_ridder_hm(expmodel_perr_logit_grad, a=a+1e-15, b=b, args=args)
+        p_mode = functions.get_fooroots_ridder_hm(expmodel_perr_logit_grad, a=a+1e-15, b=b, args=np.array(args))
         curve = expmodel_perr_d2logIJ_dp2(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
                                     functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
         z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
@@ -407,7 +407,7 @@ def log_expmodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., 
         n = Mag_n[ii]
         # Gauss - Hermite Quadrature
         args = (beta, n*np.ones(len(pi_mu)), pi_mu, pi_err, a, b)
-        p_mode = functions.get_fooroots_ridder_hm(expmodel_perr_logit_grad_dn, a=a+1e-15, b=b, args=args)
+        p_mode = functions.get_fooroots_ridder_hm(expmodel_perr_logit_grad_dn, a=a+1e-15, b=b, args=np.array(args))
         curve = expmodel_perr_d2logIJ_dp2_dn(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
                                     functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
         z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
@@ -547,7 +547,7 @@ def log_halomodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1.,
         a = p_min[~legendre]; b = p_max[~legendre]
         args = (beta[~legendre], n*np.ones(len(pi_mu[~legendre])),
                     hz*np.ones(len(pi_mu[~legendre])), pi_mu[~legendre], pi_err[~legendre], a, b)
-        p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad, a=a+1e-15, b=b, args=args)
+        p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad, a=a+1e-15, b=b, args=np.array(args))
         curve = halomodel_perr_d2logIJ_dp2(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
                                     functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
 
@@ -573,7 +573,7 @@ def log_halomodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1.,
         n = Mag_n[ii]
         # Gauss - Hermite Quadrature
         args = (beta, n*np.ones(len(pi_mu)), hz*np.ones(len(pi_mu)), pi_mu, pi_err, a, b)
-        p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad_dh, a=a+1e-15, b=b, args=args)
+        p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad_dh, a=a+1e-15, b=b, args=np.array(args))
         curve = halomodel_perr_d2logIJ_dp2_dh(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
                                     functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
         z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
@@ -590,7 +590,7 @@ def log_halomodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1.,
         n = Mag_n[ii]
         # Gauss - Hermite Quadrature
         args = (beta, n*np.ones(len(pi_mu)), hz*np.ones(len(pi_mu)), pi_mu, pi_err, a, b)
-        p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad_dn, a=a+1e-15, b=b, args=args)
+        p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad_dn, a=a+1e-15, b=b, args=np.array(args))
         curve = halomodel_perr_d2logIJ_dp2_dn(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
                                     functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
         z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
