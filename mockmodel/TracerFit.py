@@ -50,15 +50,15 @@ class mwfit():
         a_dirichlet = 2
         self.param_trans['shd'] = {'alpha1':('nexp',0,0,-5,3,'none'),
                               'alpha2':('nexp',0,0,-5,3,'none')}
-        self.param_trans[0] = {'w':('exp',0,0,-10,10,'dirichlet',a_dirichlet),
+        self.param_trans[0] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
                           'fD': ('logit_scaled', 0,1, -10,10,'logistic'),
                           'alpha3':('nexp',0,0,-10,10,'none'),
                           'hz': ('logit_scaled', 0.1,  1.2,-10,10,'logistic')}
-        self.param_trans[1] = {'w':('exp',0,0,-10,10,'dirichlet',a_dirichlet),
+        self.param_trans[1] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
                           'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
                           'alpha3':('nexp',0,0,-10,10,'none'),
                           'hz': ('logit_scaled', 1.2,3,-10,10,'logistic')}
-        self.param_trans[2] = {'w':('exp',0,0,-10,10,'dirichlet',a_dirichlet),
+        self.param_trans[2] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
                           'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
                           'alpha3':('nexp',0,0,-10,10,'none'),
                           'hz': ('logit_scaled', 3,  7.3,-10,10,'logistic')}
@@ -123,6 +123,35 @@ class mwfit():
 
         return result
 
+    def optimize_chunk(self, niter=1, p0=None, idxs_prior=None, method='Newton-CG', ncores=1, label='_', verbose=False, disp=False, **model_kwargs):
+
+        if p0 is None:
+            if idxs_prior is None:
+                idxs_prior=np.random.choice(np.arange(self.prior_flatchain.shape[0]), niter, replace=False)
+            p0 = self.prior_flatchain[idxs_prior]
+
+        self._generate_kwargs(p0=p0[0], **model_kwargs)
+
+        p0 = np.array([self.renormalise(p0[i]) for i in range(niter)])
+
+        global Nfeval
+        Nfeval=1;
+        global lnprob_iteration
+        lnprob_iteration=-99
+
+        global poisson_kwargs_global
+        poisson_kwargs_global['chunksize']=1000
+        poisson_kwargs_global['grad']=True
+        poisson_kwargs_global['ncores']=ncores
+
+        res = scipy.optimize.minimize(nloglikelihood_chunk, p0, method=method, jac=True, options={'disp': disp},
+                                     callback=printx_lnp)
+
+        self.optimize_results['x'][label] = res['x']
+        self.optimize_results['lnp'][label] = -res['fun']
+
+        return res
+
     def mcmc(self, p0=None, ncores=1, nsteps=1000, label='_', optimize_label='_', **model_kwargs):
 
         if p0 is None:
@@ -180,14 +209,6 @@ class mwfit():
         for j in range(len(self.components)):
             for par in ['Mms', 'Mms1', 'Mms2']:
                 fid_pars['fixed_pars'][j][par]=self.fixed_pars[par]
-        # fid_pars['fixed_pars'][0] = {'Mms':self.fixed_pars['Mms'], 'fD':self.fixed_pars[0]['fD'], 'alpha3':self.fixed_pars[0]['alpha3'],
-        #                              'Mms1':self.fixed_pars['Mms1'], 'Mms2':self.fixed_pars['Mms2'],
-        #                              'Mto':self.fixed_pars[0]['Mto']}
-        # fid_pars['fixed_pars'][1] = copy(fid_pars['fixed_pars'][0]); fid_pars['fixed_pars'][2] = copy(fid_pars['fixed_pars'][0])
-        # fid_pars['fixed_pars'][1]['Mto'] = self.fixed_pars[1]['Mto']
-        # fid_pars['fixed_pars'][1]['fD'] = self.fixed_pars[1]['fD']
-        # fid_pars['fixed_pars'][2]['Mto'] = self.fixed_pars[2]['Mto']
-        # fid_pars['fixed_pars'][2]['fD'] = self.fixed_pars[2]['fD']
 
         fid_pars['functions']={}; fid_pars['functions_inv']={}; fid_pars['jacobians']={}; bounds=[]
         params_i = 0
@@ -370,7 +391,7 @@ class mwfit():
 
     def get_labels(self):
 
-        labels=[]; 
+        labels=[];
         for cmpt in np.arange(len(self.components)).tolist()+['shd',]:
             for par in self.free_pars[cmpt]:
                 labels+=[func_labels[self.param_trans[cmpt][par][0]](label_dict[par], *self.param_trans[cmpt][par][1:3]),]
@@ -379,6 +400,14 @@ class mwfit():
 def nloglikelihood(x, id=-1):
     # Negative log likelihood and gradient for Newton-CG
     lnl, grad = poisson_like(x, grad=True)
+    if id!=-1:
+        global opt_id
+        opt_id=id
+    return -lnl, -grad
+
+def nloglikelihood_chunk(x, id=-1):
+    # Negative log likelihood and gradient for Newton-CG
+    lnl, grad = poisson_like_parallel(x)
     if id!=-1:
         global opt_id
         opt_id=id
@@ -419,6 +448,56 @@ def poisson_like(params, bounds=None, grad=False):
         model_grad = np.sum(obj[1], axis=1) - integral[1] + prior[1]
         return model_val, model_grad
 
+global params_iteration
+def poisson_like_parallel_func(ii):
+    grad = poisson_kwargs_global['grad']
+    output = poisson_kwargs_global['logmodel'](poisson_kwargs_global['sample'][:,ii:ii+poisson_kwargs_global['chunksize']].copy(),
+                                            params_iteration,
+                                            gmm=copy(poisson_kwargs_global['gmm']),
+                                            fid_pars=copy(poisson_kwargs_global['fid_pars']),
+                                            grad=grad)
+    if not grad: return np.sum(obj)
+    else: return np.sum(output[0]), np.sum(output[1], axis=1)
+
+def poisson_like_parallel(params, bounds=None):
+
+    global params_iteration
+    params_iteration = params.copy()
+
+    poisson_kwargs = copy(poisson_kwargs_global)
+    grad = poisson_kwargs['grad']
+
+    # Prior boundaries
+    if bounds is None: bounds = poisson_kwargs['param_bounds']
+
+    # Optional prior inclusion
+    if poisson_kwargs_global['model_prior'] is not None:
+        prior=poisson_kwargs_global['model_prior'](params, fid_pars=poisson_kwargs['fid_pars'], grad=grad, bounds=bounds)
+    else:
+        if np.sum((params<=bounds[0])|(params>=bounds[1]))>0:
+            if grad: return -1e20, np.zeros(len(params))
+            else: return -1e20
+
+    logl_val = 0.
+    if grad: logl_grad = np.zeros(len(params))
+
+    integral = poisson_kwargs['model_integrate'](params, bins=poisson_kwargs['bins'], fid_pars=poisson_kwargs['fid_pars'], grad=grad)
+
+    i_list = np.arange(0, poisson_kwargs_global['sample'].shape[1], poisson_kwargs_global['chunksize'])
+    with Pool(poisson_kwargs['ncores']) as p:
+        for logl_i in p.imap(poisson_like_parallel_func, i_list):
+            if not grad: logl_val += logl_i
+            if grad:
+                logl_val += logl_i[0]
+                logl_grad += logl_i[1]
+
+    global lnprob_iteration
+    lnprob_iteration = logl_val - integral[0] + prior[0]
+
+    if not grad: return logl_val - integral[0] + prior[0]
+    return logl_val - integral[0] + prior[0], logl_grad - integral[1] + prior[1]
+
+
 def int_idx(i):
     if i in np.arange(10).astype(str):
         return int(i)
@@ -428,6 +507,10 @@ def int_idx(i):
 def printx(Xi):
     global Nfeval
     sys.stdout.write('At iterate {0}, {1}'.format(Nfeval, poisson_like(Xi)) + '\r')
+    Nfeval += 1
+def printx_lnp(Xi):
+    global Nfeval
+    sys.stdout.write('At iterate {0}, {1}'.format(Nfeval, lnprob_iteration) + '\r')
     Nfeval += 1
 def printx_set(Xi):
     global opt_id
