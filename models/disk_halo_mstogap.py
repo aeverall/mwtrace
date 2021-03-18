@@ -16,6 +16,7 @@ from numba import njit
 from copy import deepcopy as copy
 
 ln10 = np.log(10)
+eps = 1e-14
 
 # Integration points used for Gaia SF integration
 degree=21
@@ -658,6 +659,7 @@ def halomodel_perr_integrand_dn(p, beta, n, h, mu, err):
 @njit
 def halomodel_perr_logit_grad_dn(p, args):
     beta, n, h, mu, err, a, b = args
+    if p==1: p=eps
     return p*(beta**2 + p**2) * (a+b-2*p) +\
           ((n + 1/np.log(p) - p*(p-mu)/err**2)*(beta**2+p**2) + h*beta**2) * (p-a)*(b-p)
 @njit
@@ -1185,7 +1187,7 @@ def jacobian_params(params, fid_pars, ncomponents=1, transform=True):
     return jacobian
 
 #%% Priors
-def model_prior(params, fid_pars=None, grad=False, bounds=None):
+def model_prior(params, fid_pars=None, grad=False, bounds=None, dropoff=1e10):
 
     free_pars = fid_pars['free_pars']
 
@@ -1217,7 +1219,7 @@ def model_prior(params, fid_pars=None, grad=False, bounds=None):
         if grad: logprior_grad[params_i] += prior_gradients[prior_args[0]](params[params_i], *prior_args[1:])
         params_i += 1;
 
-    boundary_prior = exponent_tophat(params, bounds, grad=grad, dropoff=1e10)
+    boundary_prior = exponent_tophat(params, bounds, grad=grad, dropoff=dropoff)
     # unbound = (params<=bounds[0])|(params>=bounds[1])
     # if np.sum(unbound)>0:
     #     if not grad: return -1e30

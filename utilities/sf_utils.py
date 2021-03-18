@@ -11,9 +11,6 @@ from astropy.coordinates import SkyCoord
 import selectionfunctions.cog_ii as CoGii
 from selectionfunctions.std_paths import *
 
-from selectionfunctions.config import config
-config['data_dir'] = '/data/asfe2/Projects/testselectionfunctions/'
-
 def apply_gaiasf(l_sample, b_sample, G_sample, get_prob=True, dr2_sf=None, _nside=64):
 
     if dr2_sf is None: dr2_sf = CoGii.dr2_sf(version='modelAB', crowding=False)
