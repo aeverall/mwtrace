@@ -24,7 +24,8 @@ func_inv_jac = {'none': lambda a, b: (lambda p:p, lambda x:x, lambda x:1),
 def logit_label(s,a,b):
     if (a==0) and (b==1): return r'logit$({0})$'.format(s.replace('$',''))
     elif (a==0): return r'logit$({0}/{1})$'.format(s.replace('$',''),b)
-    else: return r'logit$(({0}-{1})/({2}-{1}))$'.format(s.replace('$',''),a,b)
+    else: return r'logit$(\frac{{ {0}-{1} }}{{ {2}-{1} }} )$'.format(s.replace('$',''),a,b)
+    #else: return r'logit$(({0}-{1})/({2}-{1}))$'.format(s.replace('$',''),a,b)
 func_labels = {'none': lambda s, a, b: s,
                 'exp':  lambda s, a, b: r'$\log({0})$'.format(s.replace('$','')),
                 'expn': lambda s, a, b: r'$-\log({0})$'.format(s.replace('$','')),

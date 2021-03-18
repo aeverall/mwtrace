@@ -92,7 +92,7 @@ def plot_chains(sampler, truths=None, labels=None, functions=None, clean_chains=
 def layered_corners(samplers, labels=None, index=None, savefolder=None, savefile=None,
                 functions=None, truths=None, fig=None, ax=None,
                 colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
-                linestyles=['-']*10, pad=0.1):#, rng=None):
+                linestyles=['-']*10, pad=0.1, **corner_kwargs):#, rng=None):
 
     if type(samplers[0])==np.ndarray: chains=[sampler.copy() for sampler in samplers]
     else: chains=[sampler.chain.copy() for sampler in samplers]
@@ -104,9 +104,9 @@ def layered_corners(samplers, labels=None, index=None, savefolder=None, savefile
 
     if ax is None: fig, ax = plt.subplots(ndim,ndim, figsize=(8,8), sharex='col')
 
-    corner_kwargs = {'max_n_ticks':4, 'title_kwargs':{"fontsize": 15}, 'label_kwargs':{'fontsize':15},
-                    'plot_contours':True, 'fill_contours':True, 'smooth':2, 'bins':50,
-                    'data_kwargs':{'alpha':0.}}
+    corner_kwargs = dict({'max_n_ticks':4, 'title_kwargs':{"fontsize": 15}, 'label_kwargs':{'fontsize':15},
+                                            'plot_contours':True, 'fill_contours':True, 'smooth':2, 'bins':50,
+                                            'data_kwargs':{'alpha':0.}, 'truth_color':'k'}, **corner_kwargs)
 
     for i, chain in enumerate(chains):
         flatchain = chain[:,int(chain.shape[1]/2):,:].reshape(-1,chain.shape[2])
@@ -162,6 +162,7 @@ def corner_new(xs, bins=20, range=None, weights=None, color="k", linestyle='-',
            scale_hist=False, quantiles=None, verbose=False, fig=None,
            max_n_ticks=5, top_ticks=False, use_math_text=False,
            hist_kwargs=None, functions=None, **hist2d_kwargs):
+
 
     if quantiles is None:
         quantiles = []
@@ -253,7 +254,7 @@ def corner_new(xs, bins=20, range=None, weights=None, color="k", linestyle='-',
     # Set up the default histogram keywords.
     if hist_kwargs is None:
         hist_kwargs = dict()
-    hist_kwargs["color"] = hist_kwargs.get("color", color)
+    hist_kwargs["color"] = color#hist_kwargs.get("color", color)
     if smooth1d is None:
         hist_kwargs["histtype"] = hist_kwargs.get("histtype", "step")
 
