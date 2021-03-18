@@ -338,41 +338,45 @@ def log_expmodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., 
                   log_Ams - np.log(a1) + alpha1*(Mms+10-m_mu)]
 
     p_model = np.zeros((4, len(pi_mu)))
+    if grad:
+        dp_model_dhz = np.zeros((4, len(pi_mu)))
+        dp_model_dn = np.zeros((4, len(pi_mu)))
     for ii in range(4):
 
-        p_integral = np.zeros(len(pi_mu))
-
-        p_min = np.exp((Mag_bounds[ii  ]+10-m_mu)*ln10/5)
-        p_max = np.exp((Mag_bounds[ii+1]+10-m_mu)*ln10/5)
-
+        a = np.exp((Mag_bounds[ii  ]+10-m_mu)*ln10/5)
+        b = np.exp((Mag_bounds[ii+1]+10-m_mu)*ln10/5)
         n = Mag_n[ii]
-        args = (abs_sin_lat/hz, n*np.ones(len(pi_mu)), pi_mu, pi_err)
-        grad_min = expmodel_perr_grad(p_min, args)
-        grad_max = expmodel_perr_grad(p_max, args)
-        legendre = grad_min*grad_max>0
-        legendre[:] = False
-
-        # Gauss - Legendre Quadrature
-        a = p_min[legendre][:,np.newaxis]; b = p_max[legendre][:,np.newaxis]
-        args = (beta[legendre], n*np.ones(len(pi_mu[legendre])), pi_mu[legendre], pi_err[legendre])
-        leg_nodes, leg_weights = np.polynomial.legendre.leggauss(degree)
-        leg_nodes = leg_nodes[np.newaxis,:] * (b-a)/2 + (b+a)/2
-        p_integral[legendre] = np.sum(expmodel_perr_integrand(leg_nodes.T, *args), axis=0)
 
         # Gauss - Hermite Quadrature
-        a = p_min[~legendre]; b = p_max[~legendre]
-
-        args = (beta[~legendre], n*np.ones(len(pi_mu[~legendre])), pi_mu[~legendre], pi_err[~legendre], a, b)
+        args = (beta, n*np.ones(len(pi_mu)), pi_mu, pi_err, a, b)
         p_mode = functions.get_fooroots_ridder_hm(expmodel_perr_logit_grad, a=a+1e-15, b=b, args=np.array(args))
-
         curve = expmodel_perr_d2logIJ_dp2(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
                                     functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
         z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
-
         sigma = 1/np.sqrt(-curve)
-        p_integral[~legendre] = functions.integrate_gh_gap(expmodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=degree)
+        p_integral = functions.integrate_gh_gap(expmodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=degree)
+        p_model[ii] = p_integral.copy()
 
-        p_model[ii] = p_integral
+        if grad:
+            # Gauss - Hermite Quadrature
+            args = (beta, (n-1)*np.ones(len(pi_mu)), pi_mu, pi_err, a, b)
+            p_mode = functions.get_fooroots_ridder_hm(expmodel_perr_logit_grad, a=a+1e-15, b=b, args=np.array(args))
+            curve = expmodel_perr_d2logIJ_dp2(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
+                                        functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
+            z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
+            sigma = 1/np.sqrt(-curve)
+            p_integral = functions.integrate_gh_gap(expmodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=degree)
+            dp_model_dhz[ii] = p_integral
+            # Gauss - Hermite Quadrature
+            delta=1e-8
+            args = (beta, (n+delta)*np.ones(len(pi_mu)), pi_mu, pi_err, a, b)
+            p_mode = functions.get_fooroots_ridder_hm(expmodel_perr_logit_grad, a=a+1e-15, b=b, args=np.array(args))
+            curve = expmodel_perr_d2logIJ_dp2(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
+                                        functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
+            z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
+            sigma = 1/np.sqrt(-curve)
+            p_integral = functions.integrate_gh_gap(expmodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=degree)
+            dp_model_dn[ii] = (p_integral-p_model[ii])/delta
 
     log_p = scipy.special.logsumexp(Mag_norm, b=p_model, axis=0)
     log_lambda = log_pnorm + log_p - 0.5*np.log(2*np.pi) - log_pi_err
@@ -383,38 +387,7 @@ def log_expmodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., 
 
     grad_lambda = np.zeros((pi_mu.shape[0], 6)) + np.nan
     # hz
-    dp_model_dhz = np.zeros((4, len(pi_mu)))
-    for ii in range(4): # Run integration with n -> n-1
-        p_integral = np.zeros(len(pi_mu))
-        a = np.exp((Mag_bounds[ii  ]+10-m_mu)*ln10/5)
-        b = np.exp((Mag_bounds[ii+1]+10-m_mu)*ln10/5)
-        n = Mag_n[ii]-1
-        # Gauss - Hermite Quadrature
-        args = (beta, n*np.ones(len(pi_mu)), pi_mu, pi_err, a, b)
-        p_mode = functions.get_fooroots_ridder_hm(expmodel_perr_logit_grad, a=a+1e-15, b=b, args=np.array(args))
-        curve = expmodel_perr_d2logIJ_dp2(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
-                                    functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
-        z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
-        sigma = 1/np.sqrt(-curve)
-        p_integral = functions.integrate_gh_gap(expmodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=degree)
-        dp_model_dhz[ii] = p_integral
     grad_lambda[:,0] = -3/hz + abs_sin_lat/hz**2 * np.sum(dp_model_dhz*np.exp(Mag_norm), axis=0)/exp_log_p
-    # n
-    dp_model_dn = np.zeros((4, len(pi_mu)))
-    for ii in range(4): # Run integration with log(p)p^n
-        p_integral = np.zeros(len(pi_mu))
-        a = np.exp((Mag_bounds[ii  ]+10-m_mu)*ln10/5)
-        b = np.exp((Mag_bounds[ii+1]+10-m_mu)*ln10/5)
-        n = Mag_n[ii]
-        # Gauss - Hermite Quadrature
-        args = (beta, n*np.ones(len(pi_mu)), pi_mu, pi_err, a, b)
-        p_mode = functions.get_fooroots_ridder_hm(expmodel_perr_logit_grad_dn, a=a+1e-15, b=b, args=np.array(args))
-        curve = expmodel_perr_d2logIJ_dp2_dn(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
-                                    functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
-        z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
-        sigma = 1/np.sqrt(-curve)
-        p_integral = functions.integrate_gh_gap(expmodel_perr_integrand_dn, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=degree)
-        dp_model_dn[ii] = p_integral
     # alpha3
     grad_lambda[:,1] = np.exp(Mag_norm[0])*((1/alpha3 + Mto+10-m_mu)*p_model[0] - 5/ln10*dp_model_dn[0])/exp_log_p
     # fD
