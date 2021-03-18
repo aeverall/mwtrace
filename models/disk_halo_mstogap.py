@@ -498,7 +498,7 @@ def log_halomodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1.,
     if grad:
         dp_model_dhz = np.zeros((4, len(pi_mu)))
         dp_model_dn = np.zeros((4, len(pi_mu)))
-    for ii in range(1):
+    for ii in range(4):
 
         p_integral = np.zeros(len(pi_mu))
 
