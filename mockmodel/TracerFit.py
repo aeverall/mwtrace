@@ -264,13 +264,14 @@ class mwfit():
             sample_2d = np.vstack((1/self.sample['s'], np.log(1/self.sample['s']),
                                      self.sample['sinb'], np.log(np.sqrt(1-self.sample['sinb']**2)),
                                      self.sample['m']))
-            self.fid_pars['models']=[dh_msto.log_expmodel_grad, dh_msto.log_expmodel_grad, dh_msto.log_halomodel_grad]
+
+            self.fid_pars['models']=[{'disk':dh_msto.log_expmodel_grad, 'halo':dh_msto.log_halomodel_grad}[cmpt] for cmpt in self.components]
             self.poisson_kwargs['logmodel'] = dh_msto.logmodel_grad
         else:
             sample_2d = np.vstack((self.sample['parallax_obs'], self.sample['parallax_error'],
                                    np.abs(self.sample['sinb']), np.log(np.sqrt(1-self.sample['sinb']**2)),
                                    self.sample['m'], np.log(self.sample['parallax_error'])))
-            self.fid_pars['models']=[dh_msto.log_expmodel_perr_grad, dh_msto.log_expmodel_perr_grad, dh_msto.log_halomodel_perr_grad]
+            self.fid_pars['models']=[{'disk':dh_msto.log_expmodel_perr_grad, 'halo':dh_msto.log_halomodel_perr_grad}[cmpt] for cmpt in self.components]
             self.poisson_kwargs['logmodel'] = dh_msto.logmodel_perr_grad
 
         if not self.sf_bool:

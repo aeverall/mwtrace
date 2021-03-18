@@ -16,7 +16,7 @@ from numba import njit
 from copy import deepcopy as copy
 
 ln10 = np.log(10)
-eps = 1e-14
+eps = 1e-12
 
 # Integration points used for Gaia SF integration
 degree=21
@@ -522,41 +522,50 @@ def log_halomodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1.,
                   log_Ams - np.log(a1) + alpha1*(Mms+10-m_mu)]
 
     p_model = np.zeros((4, len(pi_mu)))
-    for ii in range(4):
+    if grad:
+        dp_model_dhz = np.zeros((4, len(pi_mu)))
+        dp_model_dn = np.zeros((4, len(pi_mu)))
+    for ii in range(1):
 
         p_integral = np.zeros(len(pi_mu))
 
         n = Mag_n[ii]
-        p_min = np.exp((Mag_bounds[ii  ]+10-m_mu)*ln10/5)
-        p_max = np.exp((Mag_bounds[ii+1]+10-m_mu)*ln10/5)
-
-        args = (beta, n*np.ones(len(pi_mu)), hz*np.ones(len(pi_mu)), pi_mu, pi_err)
-        grad_min = halomodel_perr_grad(p_min, *args)
-        grad_max = halomodel_perr_grad(p_max, *args)
-        legendre = grad_min*grad_max>0
-        legendre[:]=False
-
-        # Gauss - Legendre Quadrature
-        a = p_min[legendre]; b = p_max[legendre]
-        args = (beta[legendre], n*np.ones(len(pi_mu))[legendre],
-                    hz*np.ones(len(pi_mu))[legendre], pi_mu[legendre], pi_err[legendre])
-        leg_nodes, leg_weights = np.polynomial.legendre.leggauss(degree)
-        leg_nodes = leg_nodes[np.newaxis,:].T * (b-a)/2 + (b+a)/2
-        p_integral[legendre] = np.sum(halomodel_perr_integrand(leg_nodes, *args), axis=0)
+        a = np.exp((Mag_bounds[ii  ]+10-m_mu)*ln10/5)
+        b = np.exp((Mag_bounds[ii+1]+10-m_mu)*ln10/5)
 
         # Gauss - Hermite Quadrature
-        a = p_min[~legendre]; b = p_max[~legendre]
-        args = (beta[~legendre], n*np.ones(len(pi_mu[~legendre])),
-                    hz*np.ones(len(pi_mu[~legendre])), pi_mu[~legendre], pi_err[~legendre], a, b)
+        args = (beta, n*np.ones(len(pi_mu)), hz*np.ones(len(pi_mu)), pi_mu, pi_err, a, b)
         p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad, a=a+1e-15, b=b, args=np.array(args))
         curve = halomodel_perr_d2logIJ_dp2(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
                                     functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
 
         z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
         sigma = 1/np.sqrt(-curve)
-        p_integral[~legendre] = functions.integrate_gh_gap(halomodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=10)
+        p_integral = functions.integrate_gh_gap(halomodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=10)
+        p_model[ii] = p_integral.copy()
 
-        p_model[ii] = p_integral
+        if grad:
+            delta=1e-8
+            # Gauss - Hermite Quadrature
+            args = (beta, n*np.ones(len(pi_mu)), (hz+delta)*np.ones(len(pi_mu)), pi_mu, pi_err, a, b)
+            p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad, a=a+1e-15, b=b, args=np.array(args))
+            curve = halomodel_perr_d2logIJ_dp2(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
+                                        functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
+
+            z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
+            sigma = 1/np.sqrt(-curve)
+            p_integral = functions.integrate_gh_gap(halomodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=10)
+            dp_model_dhz[ii] = (p_integral-p_model[ii])/delta
+            # Gauss - Hermite Quadrature
+            args = (beta, (n+delta)*np.ones(len(pi_mu)), hz*np.ones(len(pi_mu)), pi_mu, pi_err, a, b)
+            p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad, a=a+1e-15, b=b, args=np.array(args))
+            curve = halomodel_perr_d2logIJ_dp2(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
+                                        functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
+
+            z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
+            sigma = 1/np.sqrt(-curve)
+            p_integral = functions.integrate_gh_gap(halomodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=10)
+            dp_model_dn[ii] = (p_integral-p_model[ii])/delta
 
     log_p = scipy.special.logsumexp(Mag_norm, b=p_model, axis=0)
     log_lambda = log_pnorm + log_p - 0.5*np.log(2*np.pi) - log_pi_err
@@ -566,38 +575,7 @@ def log_halomodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1.,
 
     grad_lambda = np.zeros((pi_mu.shape[0], 6)) + np.nan
     # hz
-    dp_model_dhz = np.zeros((4, len(pi_mu)))
-    for ii in range(4): # Run integration with n -> n-1
-        p_integral = np.zeros(len(pi_mu))
-        a = np.exp((Mag_bounds[ii  ]+10-m_mu)*ln10/5)
-        b = np.exp((Mag_bounds[ii+1]+10-m_mu)*ln10/5)
-        n = Mag_n[ii]
-        # Gauss - Hermite Quadrature
-        args = (beta, n*np.ones(len(pi_mu)), hz*np.ones(len(pi_mu)), pi_mu, pi_err, a, b)
-        p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad_dh, a=a+1e-15, b=b, args=np.array(args))
-        curve = halomodel_perr_d2logIJ_dp2_dh(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
-                                    functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
-        z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
-        sigma = 1/np.sqrt(-curve)
-        p_integral = functions.integrate_gh_gap(halomodel_perr_integrand_dh, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=degree)
-        dp_model_dhz[ii] = p_integral
     grad_lambda[:,0] = scipy.special.digamma(hz/2)/2 - scipy.special.digamma((hz-3)/2)/2 + np.sum(dp_model_dhz*np.exp(Mag_norm), axis=0)/exp_log_p
-    # n
-    dp_model_dn = np.zeros((4, len(pi_mu)))
-    for ii in range(4): # Run integration with log(p)p^n
-        p_integral = np.zeros(len(pi_mu))
-        a = np.exp((Mag_bounds[ii  ]+10-m_mu)*ln10/5)
-        b = np.exp((Mag_bounds[ii+1]+10-m_mu)*ln10/5)
-        n = Mag_n[ii]
-        # Gauss - Hermite Quadrature
-        args = (beta, n*np.ones(len(pi_mu)), hz*np.ones(len(pi_mu)), pi_mu, pi_err, a, b)
-        p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad_dn, a=a+1e-15, b=b, args=np.array(args))
-        curve = halomodel_perr_d2logIJ_dp2_dn(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
-                                    functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
-        z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
-        sigma = 1/np.sqrt(-curve)
-        p_integral = functions.integrate_gh_gap(halomodel_perr_integrand_dn, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=degree)
-        dp_model_dn[ii] = p_integral
     # alpha3
     grad_lambda[:,1] = np.exp(Mag_norm[0])*((1/alpha3 + Mto+10-m_mu)*p_model[0] - 5/ln10*dp_model_dn[0])/exp_log_p
     # fD
@@ -659,7 +637,6 @@ def halomodel_perr_integrand_dn(p, beta, n, h, mu, err):
 @njit
 def halomodel_perr_logit_grad_dn(p, args):
     beta, n, h, mu, err, a, b = args
-    if p==1: p=eps
     return p*(beta**2 + p**2) * (a+b-2*p) +\
           ((n + 1/np.log(p) - p*(p-mu)/err**2)*(beta**2+p**2) + h*beta**2) * (p-a)*(b-p)
 @njit
