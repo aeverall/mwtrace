@@ -720,7 +720,6 @@ def integral_model_gaiaSF_grad(params, bins=None, fid_pars=None, gsftest=None, t
 
     return np.sum(weights * integralcmpts), integral_grad*jacobian
 
-
 def gaiasf_integrand_disk_grad(m, sinb, _selectionfunction,
                           hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
                           Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27,
@@ -1005,6 +1004,328 @@ def gaiasf_integrand_halo_grad(m, sinb, _selectionfunction,
                                     +  grad_I[:,:,1:] *_selectionfunction[1:,i])*(m[1:]-m[:-1]), axis=2)
 
     return _uni_grid, full_grad_I
+
+
+def integral_model_subgaiaSF_grad(params, bins=None, fid_pars=None, gsftest=None, test=False, grad=False):
+
+    # Input Parameters
+    ncomponents=fid_pars['ncomponents']
+    transformed_params = combined_params(params, fid_pars, ncomponents=ncomponents)
+
+    gsf_pars = fid_pars['gsf_pars']
+
+    if test: integral_pixel=np.zeros(len(gsf_pars['pixel_area']))
+
+    integralcmpts = np.zeros(ncomponents)
+    if grad: integralcmpts_grad = np.zeros((ncomponents, 6))
+    weights = np.zeros(ncomponents)
+    integral_models = {'halo':subgaiasf_integrand_halo_grad,
+                       'disk':subgaiasf_integrand_disk_grad}
+    for j in range(ncomponents):
+        _integral_model = integral_models[fid_pars['components'][j]]
+        integrand = _integral_model(gsf_pars['_m_grid'], gsf_pars['uni_sinb_pixels'],
+                                    hz=transformed_params[j]['hz'],
+                                    alpha1=transformed_params[j]['alpha1'], alpha2=transformed_params[j]['alpha2'], alpha3=transformed_params[j]['alpha3'],
+                                    fD=transformed_params[j]['fD'], Mto=transformed_params[j]['Mto'], Mms=transformed_params[j]['Mms'],
+                                    Mx=fid_pars['Mmax'], R0=fid_pars['R0'], theta=fid_pars['lat_min'], grad=grad)
+
+        if grad:
+            integrand, integrand_grad = integrand
+        else: integrand = integrand
+
+        # Summing over pixels is pretty fast!
+        integrand = integrand[gsf_pars['idx_sinb_pixels']]
+        integrand = np.sum(0.5 * (integrand[:,:-1]*gsf_pars['_selectionfunction'][:,:-1]\
+                               +  integrand[:,1:] *gsf_pars['_selectionfunction'][:,1:])*(gsf_pars['_m_grid'][1:]-gsf_pars['_m_grid'][:-1]),
+                               axis=1)
+        integralcmpts[j] = np.sum( integrand*gsf_pars['pixel_area']/(4*np.pi) )
+        if grad:
+            integrand_grad = np.moveaxis(integrand_grad[gsf_pars['idx_sinb_pixels']], 0,1)
+            integrand_grad = np.sum(0.5 * (integrand_grad[:,:,:-1]*gsf_pars['_selectionfunction'][None,:,:-1]\
+                                        +  integrand_grad[:,:,1:] *gsf_pars['_selectionfunction'][None,:,1:])*(gsf_pars['_m_grid'][1:]-gsf_pars['_m_grid'][None,:-1]),
+                                       axis=2)
+            integralcmpts_grad[j] = transformed_params[j]['w']*np.sum( integrand_grad*gsf_pars['pixel_area']/(4*np.pi), axis=1 )
+
+        weights[j] = transformed_params[j]['w']
+
+    if test: return integral_pixel
+    if not grad: return np.sum(weights * integralcmpts)# * renorm
+
+    integral_grad = np.zeros((len(params)))
+    params_i = 0
+    for j in range(ncomponents):
+        for par in fid_pars['free_pars'][j]:
+            if par=='hz': integral_grad[params_i] = integralcmpts_grad[j,0]
+            if par=='alpha3': integral_grad[params_i] = integralcmpts_grad[j,1]
+            if par=='fD': integral_grad[params_i] = integralcmpts_grad[j,2]
+            if par=='Mto': integral_grad[params_i] = integralcmpts_grad[j,3]
+            if par=='w': integral_grad[params_i] = integralcmpts[j]
+            params_i+=1
+    for par in fid_pars['free_pars']['shd']:
+        if par=='alpha1': integral_grad[params_i] = np.sum(integralcmpts_grad[:,4])
+        if par=='alpha2': integral_grad[params_i] = np.sum(integralcmpts_grad[:,5])
+        params_i+=1
+
+    jacobian = jacobian_params(params, fid_pars, ncomponents=ncomponents)
+
+    return np.sum(weights * integralcmpts), integral_grad*jacobian
+
+def subgaiasf_integrand_disk_grad(m, sinb,
+                          hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
+                          Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27,
+                          theta=np.pi/3, test=False, grad=False):
+
+    # Overall normalisation
+    norm = 2*np.tan(theta)**2
+
+    ep1=1.3; ep2=2.3;
+    a1=-np.log(10)*(ep1-1)/(2.5*alpha1); a2=-np.log(10)*(ep2-1)/(2.5*alpha2);
+
+    alphag = (np.log(a1/a2) - alpha1*(Mms-Mms1) + alpha2*(Mms-Mms2))/(Mms1-Mms2)
+    Ag = 1/a1 * np.exp((alpha1-alphag)*(Mms-Mms1))
+
+    exponent = np.array([alpha1*(Mms-Mms1), alpha1*(Mms-Mx),
+                        alpha1*(Mms-Mms1)+alphag*(Mms1-Mms2), alpha1*(Mms-Mms1),
+                        alpha2*(Mms-Mto), alpha2*(Mms-Mms2)])
+    b = np.array([a2/alpha1, -a2/alpha1, a2/alphag, -a2/alphag, a1/alpha2, -a1/alpha2])
+    Ams = fD*a1*a2/np.sum(b*np.exp(exponent))
+    AG = -alpha3*(1-fD)
+
+    if grad:
+        b_alpha1 = np.array([a2/alpha1 * ((Mms-Mms1)-1/alpha1),
+                            -a2/alpha1 * ((Mms-Mx)  -1/alpha1),
+                            a2/alphag * (-1/alpha1 + 1/alphag * ( 1/alpha1 + (Mms-Mms1))/(Mms1-Mms2)),
+                           -a2/alphag * ((Mms-Mms1)+ 1/alphag * ( 1/alpha1 + (Mms-Mms1))/(Mms1-Mms2)),
+                           -a1/(alpha1*alpha2),
+                            a1/(alpha1*alpha2)])
+        dlnAms_dalpha1 = -1/alpha1 - np.sum(b_alpha1*np.exp(exponent))*Ams/(fD*a1*a2)
+        b_alpha2 = np.array([-a2/(alpha1*alpha2),
+                             a2/(alpha1*alpha2),
+                             a2/alphag * ((Mms-Mms2)- 1/alphag * ( 1/alpha2 + (Mms-Mms2))/(Mms1-Mms2)),
+                             a2/alphag * ( 1/alpha2 + 1/alphag * ( 1/alpha2 + (Mms-Mms2))/(Mms1-Mms2)),
+                             a1/alpha2 * ((Mms-Mto) - 1/alpha2),
+                            -a1/alpha2 * ((Mms-Mms2)- 1/alpha2)])
+        dlnAms_dalpha2 = -1/alpha2 - np.sum(b_alpha2*np.exp(exponent))*Ams/(fD*a1*a2)
+
+    # Distance of magnitude break
+    sx = np.exp((m - (Mx+10))*np.log(10)/5)
+    sms1 = np.exp((m - (Mms1+10))*np.log(10)/5)
+    sms2 = np.exp((m - (Mms2+10))*np.log(10)/5)
+    sto = np.exp((m - (Mto+10))*np.log(10)/5)
+    # Exponential disk profile distance powers
+    t1 = 2+5*alpha1/np.log(10)
+    tg = 2+5*alphag/np.log(10)
+    t2 = 2+5*alpha2/np.log(10)
+    t3 = 2+5*alpha3/np.log(10)
+    # Exponential disk profile, apparent magnitude
+    exp_a1 = np.exp((Mms+10-m)*alpha1)
+    exp_ag = np.exp((Mms+10-m)*alphag)
+    exp_a2 = np.exp((Mms+10-m)*alpha2)
+    exp_a3 = np.exp((Mto+10-m)*alpha3)
+
+    integrand = np.zeros((len(sinb), len(m)))
+    if grad: grad_integrand = np.zeros((len(sinb), 6, len(m)))
+
+    for j in range(len(sinb)):
+
+        # Exponential disk profile
+        disk_1 = gamma_incc_rec_vecx(t1+1, sx*sinb[j]/hz) - gamma_incc_rec_vecx(t1+1, sms1*sinb[j]/hz)
+        disk_g = gamma_incc_rec_vecx(tg+1, sms1*sinb[j]/hz) - gamma_incc_rec_vecx(tg+1, sms2*sinb[j]/hz)
+        disk_2 = gamma_incc_rec_vecx(t2+1, sms2*sinb[j]/hz) - gamma_incc_rec_vecx(t2+1, sto*sinb[j]/hz)
+        disk_3 = gamma_incc_rec_vecx(t3+1, sto*sinb[j]/hz)
+        #disk_3 = disk_integration_gaussquadlag(sto*sinb[j]/hz, np.zeros(len(sto))+10, t3)
+        norm_disk_1 = Ams / a1 * (hz/sinb[j])**(t1+1) * exp_a1 / (2*hz**3)
+        norm_disk_g = Ams * Ag * (hz/sinb[j])**(tg+1) * exp_ag / (2*hz**3)
+        norm_disk_2 = Ams / a2 * (hz/sinb[j])**(t2+1) * exp_a2 / (2*hz**3)
+        norm_disk_3 = AG  * (hz/sinb[j])**(t3+1) * exp_a3 / (2*hz**3)
+
+        integrand[j] = norm* ( norm_disk_1*disk_1 + norm_disk_g*disk_g + norm_disk_2*disk_2 + norm_disk_3*disk_3)
+
+        if grad:
+            # hz
+            ddisk1_dhz = ( (sx*sinb[j]/hz)**(t1+1)  *np.exp(-sx  *sinb[j]/hz)\
+                         - (sms1*sinb[j]/hz)**(t1+1)*np.exp(-sms1*sinb[j]/hz) )/hz
+            ddiskg_dhz = ( (sms1*sinb[j]/hz)**(tg+1)*np.exp(-sms1*sinb[j]/hz)\
+                         - (sms2*sinb[j]/hz)**(tg+1)*np.exp(-sms2*sinb[j]/hz) )/hz
+            ddisk2_dhz = ( (sms2*sinb[j]/hz)**(t2+1)*np.exp(-sms2*sinb[j]/hz)\
+                         - (sto *sinb[j]/hz)**(t2+1)*np.exp(-sto *sinb[j]/hz) )/hz
+            ddisk3_dhz = ( (sto *sinb[j]/hz)**(t3+1)*np.exp(-sto *sinb[j]/hz) )/hz
+            grad_integrand[j,0,:] = norm*( ( disk_1*(t1-2)/hz + ddisk1_dhz )*norm_disk_1 \
+                                      + ( disk_g*(tg-2)/hz + ddiskg_dhz )*norm_disk_g \
+                                      + ( disk_2*(t2-2)/hz + ddisk2_dhz )*norm_disk_2 \
+                                      + ( disk_3*(t3-2)/hz + ddisk3_dhz )*norm_disk_3 )
+            # alpha3
+            foo = lambda x: gamma_incc_rec_vecx(x+1, sto*sinb[j]/hz)
+            #ddisk3_dt3 = (foo(t3+5e-11)-foo(t3-5e-11))/1e-10
+            #ddisk3_dt3 = disk_integration_gaussquadlag(sto*sinb[j]/hz, np.zeros(len(sto))+10, t3, grad="t")
+            ddisk3_dt3 = np.where(sto*sinb[j]/hz<1., (foo(t3+5e-11)-foo(t3-5e-11))/1e-10,
+                                  disk_integration_gaussquadlag(sto*sinb[j]/hz, np.zeros(len(sto))+10, t3, grad="t") )
+            grad_integrand[j,1,:] = norm*norm_disk_3*( (1/alpha3 + (Mto+10-m) + 5/np.log(10)*np.log(hz/sinb[j]))*disk_3\
+                                                + 5/np.log(10) * ddisk3_dt3)
+            # fD
+            grad_integrand[j,2,:] = norm* ( (norm_disk_1*disk_1 + norm_disk_g*disk_g + norm_disk_2*disk_2)/fD + norm_disk_3*disk_3*alpha3/AG )
+            # Mto
+            grad_integrand[j,3,:] = norm*( (norm_disk_1*disk_1 + norm_disk_g*disk_g)*Ams*np.exp(alpha2*(Mms-Mto))/(fD*a2) \
+                                  + norm_disk_2*( disk_2*Ams*np.exp(alpha2*(Mms-Mto))/(fD*a2) \
+                                            - np.log(10)/5 * (sto*sinb[j]/hz)**(t2+1) * np.exp(-sto*sinb[j]/hz) ) \
+                                  + norm_disk_3*( disk_3*alpha3 \
+                                            + np.log(10)/5 * (sto*sinb[j]/hz)**(t3+1) * np.exp(-sto*sinb[j]/hz) ) )
+            # alpha1, alpha2
+            foo = lambda x: gamma_incc_rec_vecx(x+1, sx*sinb[j]/hz)-gamma_incc_rec_vecx(x+1, sms1*sinb[j]/hz)
+            ddisk1_dalpha1 = 5/np.log(10) * (foo(t1+5e-11)-foo(t1+-5e-11))/1e-10#scipy.optimize.approx_fprime(t1,foo,1e-10)
+            foo = lambda x: gamma_incc_rec_vecx(x+1, sms1*sinb[j]/hz)-gamma_incc_rec_vecx(x+1, sms2*sinb[j]/hz)
+            ddiskg_dalphag = 5/np.log(10) * (foo(tg+5e-11)-foo(tg+-5e-11))/1e-10#scipy.optimize.approx_fprime(tg,foo,1e-10)
+            foo = lambda x: gamma_incc_rec_vecx(x+1, sms2*sinb[j]/hz)-gamma_incc_rec_vecx(x+1, sto*sinb[j]/hz)
+            ddisk2_dalpha2 = 5/np.log(10) * (foo(t2+5e-11)-foo(t2+-5e-11))/1e-10#scipy.optimize.approx_fprime(t2,foo,1e-10)
+
+            dalphag_dalpha1 = (-1/alpha1 - (Mms-Mms1))/(Mms1-Mms2)
+            dalphag_dalpha2 = (1/alpha2 + (Mms-Mms2))/(Mms1-Mms2)
+            # alpha1
+            grad_integrand[j,4,:] = norm*( norm_disk_1*( ddisk1_dalpha1 \
+                                              + disk_1*((dlnAms_dalpha1+1/alpha1) +   np.log(hz/sinb[j])*5/np.log(10) + (Mms+10-m)) ) \
+                                    + norm_disk_g*( ddiskg_dalphag*dalphag_dalpha1 \
+                                                   + disk_g*(dlnAms_dalpha1 + (1/alpha1 + (Mms-Mms1)*(1-dalphag_dalpha1))\
+                                                            +(np.log(hz/sinb[j])*5/np.log(10) + (Mms+10-m))*dalphag_dalpha1) ) \
+                                    + norm_disk_2 * dlnAms_dalpha1 * disk_2 )
+            # alpha2
+            grad_integrand[j,5,:] = norm*( norm_disk_1* dlnAms_dalpha2 * disk_1 \
+                            + norm_disk_g*( ddiskg_dalphag*dalphag_dalpha2 \
+                                           + disk_g*(dlnAms_dalpha2 + ((Mms-Mms1)*(-dalphag_dalpha2))\
+                                                    +(np.log(hz/sinb[j])*5/np.log(10) + (Mms+10-m))*dalphag_dalpha2) ) \
+                            + norm_disk_2 * ( ddisk2_dalpha2 \
+                                              + disk_2*((dlnAms_dalpha2+1/alpha2) +   np.log(hz/sinb[j])*5/np.log(10) + (Mms+10-m))) )
+
+    if not grad: return integrand
+    return integrand, grad_integrand
+
+def subgaiasf_integrand_halo_grad(m, sinb,
+                          hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
+                          Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27,
+                          theta=np.pi/3, test=False, grad=False):
+
+    # Overall normalisation
+    norm = 2*np.tan(theta)**2
+
+    ep1=1.3; ep2=2.3;
+    a1=-np.log(10)*(ep1-1)/(2.5*alpha1); a2=-np.log(10)*(ep2-1)/(2.5*alpha2);
+
+    alphag = (np.log(a1/a2) - alpha1*(Mms-Mms1) + alpha2*(Mms-Mms2))/(Mms1-Mms2)
+    Ag = 1/a1 * np.exp((alpha1-alphag)*(Mms-Mms1))
+
+    exponent = np.array([alpha1*(Mms-Mms1), alpha1*(Mms-Mx),
+                        alpha1*(Mms-Mms1)+alphag*(Mms1-Mms2), alpha1*(Mms-Mms1),
+                        alpha2*(Mms-Mto), alpha2*(Mms-Mms2)])
+    b = np.array([a2/alpha1, -a2/alpha1, a2/alphag, -a2/alphag, a1/alpha2, -a1/alpha2])
+    Ams = fD*a1*a2/np.sum(b*np.exp(exponent))
+    AG = -alpha3*(1-fD)
+
+    if grad:
+        b_alpha1 = np.array([a2/alpha1 * ((Mms-Mms1)-1/alpha1),
+                            -a2/alpha1 * ((Mms-Mx)  -1/alpha1),
+                            a2/alphag * (-1/alpha1 + 1/alphag * ( 1/alpha1 + (Mms-Mms1))/(Mms1-Mms2)),
+                           -a2/alphag * ((Mms-Mms1)+ 1/alphag * ( 1/alpha1 + (Mms-Mms1))/(Mms1-Mms2)),
+                           -a1/(alpha1*alpha2),
+                            a1/(alpha1*alpha2)])
+        dlnAms_dalpha1 = -1/alpha1 - np.sum(b_alpha1*np.exp(exponent))*Ams/(fD*a1*a2)
+        b_alpha2 = np.array([-a2/(alpha1*alpha2),
+                             a2/(alpha1*alpha2),
+                             a2/alphag * ((Mms-Mms2)- 1/alphag * ( 1/alpha2 + (Mms-Mms2))/(Mms1-Mms2)),
+                             a2/alphag * ( 1/alpha2 + 1/alphag * ( 1/alpha2 + (Mms-Mms2))/(Mms1-Mms2)),
+                             a1/alpha2 * ((Mms-Mto) - 1/alpha2),
+                            -a1/alpha2 * ((Mms-Mms2)- 1/alpha2)])
+        dlnAms_dalpha2 = -1/alpha2 - np.sum(b_alpha2*np.exp(exponent))*Ams/(fD*a1*a2)
+
+        dalphag_dalpha1 = (-1/alpha1 - (Mms-Mms1))/(Mms1-Mms2)
+        dalphag_dalpha2 = ( 1/alpha2 + (Mms-Mms2))/(Mms1-Mms2)
+
+    # Normalisation of halo component
+    gam_norm = 4*numba_special.vec_gamma(hz/2,hz/2)/(R0**3 * np.sqrt(np.pi) * numba_special.vec_gamma((hz-3)/2,(hz-3)/2))
+
+    # Distance of magnitude break
+    sx = np.exp((m - (Mx+10))*np.log(10)/5)
+    sms1 = np.exp((m - (Mms1+10))*np.log(10)/5)
+    sms2 = np.exp((m - (Mms2+10))*np.log(10)/5)
+    sto = np.exp((m - (Mto+10))*np.log(10)/5)
+    # Exponential disk profile distance powers
+    t1 = 2+5*alpha1/np.log(10)
+    tg = 2+5*alphag/np.log(10)
+    t2 = 2+5*alpha2/np.log(10)
+    t3 = 2+5*alpha3/np.log(10)
+    # Exponential disk profile, apparent magnitude
+    exp_a1 = np.exp((Mms+10-m)*alpha1) / a1
+    exp_ag = np.exp((Mms+10-m)*alphag) * Ag
+    exp_a2 = np.exp((Mms+10-m)*alpha2) / a2
+    exp_a3 = np.exp((Mto+10-m)*alpha3)
+
+    integrand = np.zeros((len(sinb), len(m)))
+    if grad: grad_integrand = np.zeros((len(sinb), 6, len(m)))
+
+    for j in range(len(sinb)):
+        # Power law halo profile
+        # Integrate from sx to sms
+        norm_halo_1 = Ams * gam_norm * exp_a1 * (R0/sinb[j])**(t1+1)
+        halo_1 = halo_integration_gaussquad(sx *sinb[j]/R0, sms1*sinb[j]/R0, t1, hz)
+        # Integrate from sx to sms
+        norm_halo_g = Ams * gam_norm * exp_ag * (R0/sinb[j])**(tg+1)
+        halo_g = halo_integration_gaussquad(sms1 *sinb[j]/R0, sms2*sinb[j]/R0, tg, hz)
+        # Integrate from sms to sto
+        norm_halo_2 = Ams * gam_norm * exp_a2 * (R0/sinb[j])**(t2+1)
+        halo_2 = halo_integration_gaussquad(sms2*sinb[j]/R0, sto*sinb[j]/R0, t2, hz)
+        # Integrate to inf
+        norm_halo_3 = AG  * gam_norm * exp_a3 * (R0/sinb[j])**(t3+1)
+        if alpha3>-1.: halo_3 = halo_integration_gaussquadlag(sto*sinb[j]/R0, np.inf,            t3, hz)
+        else:          halo_3 = halo_integration_gaussquad(   sto*sinb[j]/R0, 10*sto*sinb[j]/R0, t3, hz)
+
+        integrand[j] = norm*( norm_halo_1*halo_1 + norm_halo_g*halo_g + norm_halo_2*halo_2 + norm_halo_3*halo_3)
+
+        if grad:
+            # hz
+            dlngamnorm_dhz = 0.5 * (scipy.special.digamma(hz/2) - scipy.special.digamma((hz-3)/2))
+            dhalo1_dhz = -0.5 * halo_integration_gaussquad(sx *sinb[j]/R0, sms1*sinb[j]/R0, t1, hz, grad="gamma")
+            dhalog_dhz = -0.5*halo_integration_gaussquad(sms1 *sinb[j]/R0, sms2*sinb[j]/R0, tg, hz, grad="gamma")
+            dhalo2_dhz = -0.5*halo_integration_gaussquad(sms2*sinb[j]/R0, sto*sinb[j]/R0, t2, hz, grad="gamma")
+            if alpha3>-1.: dhalo3_dhz = -0.5*halo_integration_gaussquadlag(sto*sinb[j]/R0, np.inf,            t3, hz, grad="gamma")
+            else:          dhalo3_dhz = -0.5*halo_integration_gaussquad(   sto*sinb[j]/R0, 10*sto*sinb[j]/R0, t3, hz, grad="gamma")
+            grad_integrand[j,0,:] = norm*( ( halo_1*dlngamnorm_dhz + dhalo1_dhz )*norm_halo_1 \
+                                 + ( halo_g*dlngamnorm_dhz + dhalog_dhz )*norm_halo_g \
+                                 + ( halo_2*dlngamnorm_dhz + dhalo2_dhz )*norm_halo_2 \
+                                 + ( halo_3*dlngamnorm_dhz + dhalo3_dhz )*norm_halo_3 )
+            dhalo1_dalpha1 = 5/np.log(10) * halo_integration_gaussquad(sx   *sinb[j]/R0, sms1*sinb[j]/R0, t1, hz, grad="t")
+            dhalog_dalphag = 5/np.log(10) * halo_integration_gaussquad(sms1 *sinb[j]/R0, sms2*sinb[j]/R0, tg, hz, grad="t")
+            dhalo2_dalpha2 = 5/np.log(10) * halo_integration_gaussquad(sms2 *sinb[j]/R0, sto *sinb[j]/R0, t2, hz, grad="t")
+            if alpha3>-1.:
+                dhalo3_dalpha3 = 5/np.log(10)*halo_integration_gaussquadlag(sto*sinb[j]/R0, np.inf, t3, hz, grad="t")
+            else:
+                dhalo3_dalpha3 = 5/np.log(10)*halo_integration_gaussquad(sto*sinb[j]/R0, 10*sto*sinb[j]/R0, t3, hz, grad="t")
+            # alpha3
+            grad_integrand[j,1,:] = norm*norm_halo_3*( (1/alpha3 + (Mto+10-m) + 5/np.log(10)*np.log(R0/sinb[j]))*halo_3\
+                                        + dhalo3_dalpha3 )
+            # fD
+            grad_integrand[j,2,:] = norm* ( (norm_halo_1*halo_1 + norm_halo_g*halo_g + norm_halo_2*halo_2)/fD + norm_halo_3*halo_3*alpha3/AG )
+            # Mto
+            grad_integrand[j,3,:] = norm*( (norm_halo_1*halo_1 + norm_halo_g*halo_g)*Ams*np.exp(alpha2*(Mms-Mto))/(fD*a2) \
+                                  + norm_halo_2*( halo_2*Ams*np.exp(alpha2*(Mms-Mto))/(fD*a2) \
+                                            - np.log(10)/5 * (sto*sinb[j]/R0)**(t2+1) * ((-sto*sinb[j]/R0)**2 + 1)**(-hz/2) ) \
+                                  + norm_halo_3*( halo_3*alpha3 \
+                                            + np.log(10)/5 * (sto*sinb[j]/R0)**(t3+1) *  ((-sto*sinb[j]/R0)**2 + 1)**(-hz/2) ) )
+            # alpha1
+            grad_integrand[j,4,:] = norm*( norm_halo_1*( dhalo1_dalpha1 \
+                                              + halo_1*((dlnAms_dalpha1+1/alpha1) +   np.log(R0/sinb[j])*5/np.log(10) + (Mms+10-m)) ) \
+                                    + norm_halo_g*( dhalog_dalphag*dalphag_dalpha1 \
+                                                   + halo_g*(dlnAms_dalpha1 + (1/alpha1 + (Mms-Mms1)*(1-dalphag_dalpha1))\
+                                                            +(np.log(R0/sinb[j])*5/np.log(10) + (Mms+10-m))*dalphag_dalpha1) ) \
+                                    + norm_halo_2 * dlnAms_dalpha1 * halo_2 )
+            # alpha2
+            grad_integrand[j,5,:] = norm*( norm_halo_1* dlnAms_dalpha2 * halo_1 \
+                            + norm_halo_g*( dhalog_dalphag*dalphag_dalpha2 \
+                                           + halo_g*(dlnAms_dalpha2 + ((Mms-Mms1)*(-dalphag_dalpha2))\
+                                                    +(np.log(R0/sinb[j])*5/np.log(10) + (Mms+10-m))*dalphag_dalpha2) ) \
+                            + norm_halo_2 * ( dhalo2_dalpha2 \
+                                              + halo_2*((dlnAms_dalpha2+1/alpha2) +   np.log(R0/sinb[j])*5/np.log(10) + (Mms+10-m))) )
+
+    if not grad: return integrand
+    return integrand, grad_integrand
+
 
 @njit
 def gamma_incc_rec_vecx(a, x):
