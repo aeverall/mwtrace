@@ -215,7 +215,7 @@ class mwfit():
 
         return params
 
-    def _generate_fid_pars(self):
+    def _generate_fid_pars(self, sub=False, **gsf_kwargs):
 
         fid_pars = {'Mmax':self.fixed_pars['Mx'],  'lat_min':np.deg2rad(self.fixed_pars['theta_deg']), 'R0':self.fixed_pars['R0'],
                     'free_pars':{}, 'fixed_pars':{par:self.fixed_pars[par] for par in ['Mx','theta_deg','R0']},
@@ -249,7 +249,9 @@ class mwfit():
                 params_i += 1;
 
         # Gaia selection function applied
-        if self.sf_bool: fid_pars['gsf_pars'] = sf_utils.get_gaiasf_pars(theta=fid_pars['lat_min'], nskip=2, _nside=64)
+        if self.sf_bool:
+            if sub: fid_pars['gsf_pars'] = sf_utils.get_subgaiasf_pars(theta=fid_pars['lat_min'], nskip=2, _nside=64, **gsf_kwargs)
+            else: fid_pars['gsf_pars'] = sf_utils.get_gaiasf_pars(theta=fid_pars['lat_min'], nskip=2, _nside=64)
 
         self.fid_pars=fid_pars
 
@@ -362,6 +364,8 @@ class mwfit():
                 data['param_trans'][cmpt][par] = data['param_trans'][cmpt][par].astype('U20').tolist()
                 for i in [1,2,3,4]:
                     data['param_trans'][cmpt][par][i] = float(data['param_trans'][cmpt][par][i])
+                try: data['param_trans'][cmpt][par][6] = float(data['param_trans'][cmpt][par][6])
+                except IndexError: pass
         for cmpt in data['free_pars'].keys():
             data['free_pars'][cmpt] = data['free_pars'][cmpt].astype('U20')
 
@@ -485,6 +489,7 @@ def poisson_like(params, bounds=None, grad=False):
     elif grad:
         model_val = np.sum(obj[0]) - integral[0] + prior[0]
         model_grad = np.sum(obj[1], axis=1) - integral[1] + prior[1]
+        print(integral)
         if np.isnan(model_val): print('Nan lnp: ', params)
         # if np.sum(np.abs(model_grad))>1e5:
         #     print(model_val)
