@@ -26,9 +26,9 @@ if __name__=='__main__':
     times = []; checkpoints = []
     times.append(time.time()); checkpoints.append('start')
 
-    run_id=3
+    run_id=5
 
-    size = 90000
+    size = 99900
     file = "sample"
     # Load Sample
     sample = {}; true_pars={}; latent_pars={};
@@ -57,7 +57,8 @@ if __name__=='__main__':
     sample = sample
 
     message = f"""\n{run_id:03d} ---> Sample size: {size:d}, SF subset: {np.sum(sample['gaiasf_subset']):d} \n
-                 fD and alpha3 free - 14 free parameters."""
+                 fD and alpha3 free - 14 free parameters. perr gradient evaluation made numerically.
+                 ftol=1e-12, gtol=1e-7. When lnp=nan in mcmc - return 1e-20."""
     with open(f'/data/asfe2/Projects/mwtrace_data/mockmodel/messages.txt', 'a') as f:
         f.write(message)
     print(message)
@@ -120,6 +121,7 @@ if __name__=='__main__':
     times.append(time.time()); checkpoints.append('SF selected')
 
     if True:
+        print('nstep:', 5000)
         save_file = f'/data/asfe2/Projects/mwtrace_data/mockmodel/mock_{file}_{size:d}_sf_perr_{run_id:03d}.h'
         if os.path.exists(save_file):
             raise ValueError('File %s already exists...')
@@ -135,9 +137,14 @@ if __name__=='__main__':
         print("True likelihood: ", model_sf_err.evaluate_likelihood(true_params_f))
         print(true_params_f, end="\n")
         # Optimize with BFGS
-        model_sf_err.optimize_chunk(niter=3, ncores=30, label='sf_perr_bfgs', method='L-BFGS-B', verbose=True, minimize_options={'disp':False})
+        model_sf_err.optimize_chunk(niter=5, ncores=40, label='sf_perr_bfgs', method='L-BFGS-B', verbose=True, minimize_options={'disp':False, 'ftol':1e-12, 'gtol':1e-7})
+        # model_sf_err.optimize_results['x']['sf_perr_bfgs'] = np.array([[  9.02373448,   0.06519842,   2.87247407,   0.20566405,
+        #                                              10.3484506 ,  -0.99045504,   7.80286892,  -5.        ,
+        #                                              18.93727588, -10.        ,  -1.29237893,  -5.        ,
+        #                                             -1.46861251,  -0.51517986]])
+        # model_sf_err.optimize_results['lnp']['sf_perr_bfgs'] = np.array([206000])
         # Run MCMC
-        model_sf_err.mcmc(ncores=30, nsteps=5000, label='sf_perr_mcmc', optimize_label='sf_perr_bfgs')
+        model_sf_err.mcmc(ncores=40, nsteps=2000, label='sf_perr_mcmc', optimize_label='sf_perr_bfgs')
         # Save results
         model_sf_err.save(save_file, true_pars, mode='w')
 

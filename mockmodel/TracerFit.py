@@ -171,6 +171,7 @@ class mwfit():
 
         if p0 is None:
             p0 = self.optimize_results['x'][optimize_label][np.argmax(self.optimize_results['lnp'][optimize_label])]
+        print('p0 = ', p0)
 
         self._generate_kwargs(p0=p0, **model_kwargs)
 
@@ -479,7 +480,9 @@ def poisson_like(params, bounds=None, grad=False):
 
     if not grad:
         model_val = np.sum(obj) - integral + prior
-        if np.isnan(model_val): print('Nan lnp: ', params)
+        if np.isnan(model_val):
+            print('Nan lnp: ', params)
+            return -1e20
         return model_val
 
     elif grad:
@@ -545,10 +548,14 @@ def poisson_like_parallel(params, bounds=None):
         print(params)
         raise
 
+    if not grad:
+        if np.isnan(model_val):
+            print('Nan lnp: ', params)
+            return -1e20
+        return logl_val - integral[0] + prior[0]
+
     global lnprob_iteration
     lnprob_iteration = logl_val - integral[0] + prior[0]
-
-    if not grad: return logl_val - integral[0] + prior[0]
     return logl_val - integral[0] + prior[0], logl_grad - integral[1] + prior[1]
 
 

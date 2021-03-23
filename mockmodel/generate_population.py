@@ -64,9 +64,10 @@ if __name__=='__main__':
     for j in range(3):
         selected_samples[j]={}
 
-    nsample = 100000
-    ncores=2
-    nstep=int(nsample/30 * 2 * 5)
+    nsample = 1000000
+    ncores=10
+    nwalkers=30
+    nstep=int(500 + nsample /nwalkers /ncores * 2 * 5)
     print('Nsample: ', nsample)
 
 
@@ -92,7 +93,7 @@ if __name__=='__main__':
     j_ngiant = j_nsample - np.round(j_nsample * fdwarf).astype(int)
 
 
-    nwalkers=30; ndim=1;
+    ndim=1;
     for j in range(3):
 
         print('Dwarf %d' % j)
@@ -103,12 +104,23 @@ if __name__=='__main__':
 
         p0_walkers = np.random.rand(nwalkers,1) * (global_params['Mms1']-params[j]['Mto']) + params[j]['Mto']
 
-        with Pool(ncores) as pool:
-            sampler = emcee.EnsembleSampler(nwalkers, ndim, loglike, pool=pool)
+        iterations = np.arange(ncores)
+        def run_mcmc(i):
+            sampler=emcee.EnsembleSampler(nwalkers, ndim, loglike)
             for pos,lnp,rstate in tqdm.tqdm(sampler.sample(p0_walkers, iterations=nstep), total=nstep):
                 pass
+            return sampler.chain, i
+        chain = np.zeros((ncores*nwalkers, nstep, ndim))
+        with Pool(ncores) as pool:
+            for chain_i, i in pool.imap(run_mcmc, iterations):
+                chain[i*nwalkers:(i+1)*nwalkers]=chain_i
+        burnt_samples[j]['M_dwarfs'] = np.reshape(chain[:, int(nstep/2):, :][:,::3,:], (-1,1)).copy().T[0]
 
-        burnt_samples[j]['M_dwarfs'] = np.reshape(sampler.chain[:, int(nstep/2):, :][:,::3,:], (-1,1)).copy().T[0]
+        # with Pool(ncores) as pool:
+        #     sampler = emcee.EnsembleSampler(nwalkers, ndim, loglike, pool=pool)
+        #     for pos,lnp,rstate in tqdm.tqdm(sampler.sample(p0_walkers, iterations=nstep), total=nstep):
+        #         pass
+        # burnt_samples[j]['M_dwarfs'] = np.reshape(sampler.chain[:, int(nstep/2):, :][:,::3,:], (-1,1)).copy().T[0]
 
     for j in range(3):
         print('Giant %d' % j)
@@ -117,12 +129,23 @@ if __name__=='__main__':
 
         p0_walkers = np.random.rand(nwalkers,1) * params[j]['Mto']
 
-        with Pool(ncores) as pool:
-            sampler = emcee.EnsembleSampler(nwalkers, ndim, loglike, pool=pool)
+        iterations = np.arange(ncores)
+        def run_mcmc(i):
+            sampler=emcee.EnsembleSampler(nwalkers, ndim, loglike)
             for pos,lnp,rstate in tqdm.tqdm(sampler.sample(p0_walkers, iterations=nstep), total=nstep):
                 pass
+            return sampler.chain, i
+        chain = np.zeros((ncores*nwalkers, nstep, ndim))
+        with Pool(ncores) as pool:
+            for chain_i, i in pool.imap(run_mcmc, iterations):
+                chain[i*nwalkers:(i+1)*nwalkers]=chain_i
+        burnt_samples[j]['M_giants'] = np.reshape(chain[:, int(nstep/2):, :][:,::3,:], (-1,1)).copy().T[0]
 
-        burnt_samples[j]['M_giants'] = np.reshape(sampler.chain[:, int(nstep/2):, :][:,::3,:], (-1,1)).copy().T[0]
+        # with Pool(ncores) as pool:
+        #     sampler = emcee.EnsembleSampler(nwalkers, ndim, loglike, pool=pool)
+        #     for pos,lnp,rstate in tqdm.tqdm(sampler.sample(p0_walkers, iterations=nstep), total=nstep):
+        #         pass
+        # burnt_samples[j]['M_giants'] = np.reshape(sampler.chain[:, int(nstep/2):, :][:,::3,:], (-1,1)).copy().T[0]
 
 
     for j in range(3):
@@ -143,7 +166,7 @@ if __name__=='__main__':
     #%% Position distribution sampling
     functions = [disk_pos, disk_pos, halo_pos]
 
-    nwalkers=30; ndim=2;
+    ndim=2;
     for j in range(3):
         print('Spatial %d' % j)
         def loglike(x):
@@ -153,12 +176,23 @@ if __name__=='__main__':
         p0_walkers *= 1-np.sin(np.deg2rad(global_params['theta_deg']))
         p0_walkers += np.sin(np.deg2rad(global_params['theta_deg']))
 
-        with Pool(ncores) as pool:
-            sampler = emcee.EnsembleSampler(nwalkers, ndim, loglike, pool=pool)
+        iterations = np.arange(ncores)
+        def run_mcmc(i):
+            sampler=emcee.EnsembleSampler(nwalkers, ndim, loglike)
             for pos,lnp,rstate in tqdm.tqdm(sampler.sample(p0_walkers, iterations=nstep), total=nstep):
                 pass
+            return sampler.chain, i
+        chain = np.zeros((ncores*nwalkers, nstep, ndim))
+        with Pool(ncores) as pool:
+            for chain_i, i in pool.imap(run_mcmc, iterations):
+                chain[i*nwalkers:(i+1)*nwalkers]=chain_i
+        burnt_samples[j]['x'] = np.reshape(chain[:, int(nstep/2):, :][:,::3,:], (-1,ndim)).copy().T
 
-        burnt_samples[j]['x'] = np.reshape(sampler.chain[:, int(nstep/2):, :][:,::3,:], (-1,ndim)).copy().T
+        # with Pool(ncores) as pool:
+        #     sampler = emcee.EnsembleSampler(nwalkers, ndim, loglike, pool=pool)
+        #     for pos,lnp,rstate in tqdm.tqdm(sampler.sample(p0_walkers, iterations=nstep), total=nstep):
+        #         pass
+        # burnt_samples[j]['x'] = np.reshape(sampler.chain[:, int(nstep/2):, :][:,::3,:], (-1,ndim)).copy().T
 
     for j in range(3):
         cmpt_sample = np.random.choice(np.arange(burnt_samples[j]['x'].shape[1]), j_nsample[j], replace=False)
@@ -177,17 +211,26 @@ if __name__=='__main__':
 
     # Observables - draws from error distribution
     # Observed parallax
-    selected_samples['parallax_error'] = scipy.stats.gamma.rvs(1., size=global_params['N'])/2.
-    selected_samples['parallax'] = 1/selected_samples['s']
-    selected_samples['parallax_obs'] = np.random.normal(selected_samples['parallax'], selected_samples['parallax_error'])
+    # selected_samples['parallax_error'] = scipy.stats.gamma.rvs(1., size=global_params['N'])/2.
+    # selected_samples['parallax'] = 1/selected_samples['s']
+    # selected_samples['parallax_obs'] = np.random.normal(selected_samples['parallax'], selected_samples['parallax_error'])
 
     # Observed apparent magnitude
-    selected_samples['m_err'] = scipy.stats.gamma.rvs(1.5, size=global_params['N'])/3.
-    selected_samples['m_obs'] = np.random.normal(selected_samples['m'], selected_samples['m_err'])
+    # selected_samples['m_err'] = scipy.stats.gamma.rvs(1.5, size=global_params['N'])/3.
+    # selected_samples['m_obs'] = np.random.normal(selected_samples['m'], selected_samples['m_err'])
 
+    import scanninglaw.asf as asf
+    from scanninglaw.source import Source
+    from scanninglaw.config import config
+    asf.fetch()
+    config['data_dir'] = '/data/asfe2/Projects/testscanninglaw/'
+    dr2_asf = asf.asf(version='cogiv_2020')
+    c=Source(l=selected_samples['l'], b=np.arcsin(selected_samples['sinb']), unit='rad', frame='galactic', photometry={'gaia_g':selected_samples['m']})
+    selected_samples['parallax_error'] = np.sqrt(dr2_asf(c)[2,2])
+    selected_samples['parallax_obs'] = np.random.normal(1/selected_samples['s'], selected_samples['parallax_error'])
 
     #%% Save data in HDF5 format
-    filename = '/data/asfe2/Projects/mwtrace_data/mockmodel/sample.h'
+    filename = '/data/asfe2/Projects/mwtrace_data/mockmodel/sample_1m_test.h'
     print('Saving...' + filename)
     with h5py.File(filename, 'w') as hf:
             for k in global_params.keys():
@@ -195,8 +238,7 @@ if __name__=='__main__':
             for j in range(3):
                 for k in params[j].keys():
                     hf.create_dataset('true_pars/'+str(j)+'/'+k, data=params[j][k])
-            for k in ['s', 'sinb', 'l', 'M', 'cmpt',
-                      'm','parallax_error', 'parallax_obs','m_err','m_obs']:
+            for k in ['s', 'sinb', 'l', 'M', 'cmpt', 'm','parallax_error', 'parallax_obs']:#,'m_err','m_obs']:
                 print(k, len(selected_samples[k]))
                 hf.create_dataset('sample/'+k, data=selected_samples[k])
-            hf.create_dataset('sample/source_id', data=np.arange(len(selected_samples['s']))
+            hf.create_dataset('sample/source_id', data=np.arange(len(selected_samples['s'])))
