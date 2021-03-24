@@ -514,7 +514,7 @@ def log_halomodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1.,
 
         z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
         sigma = 1/np.sqrt(-curve)
-        p_integral = functions.integrate_gh_gap(halomodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=10)
+        p_integral = functions.integrate_gh_gap(halomodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=degree)
         p_model[ii] = p_integral.copy()
 
         if grad:

@@ -65,7 +65,7 @@ class mwfit():
         self.param_trans[2] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
                           'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
                           'alpha3':('nexp',0,0,-5,3,'none'),
-                          'hz': ('logit_scaled', 3,  7.3,-10,10,'logistic')}
+                          'hz': ('logit_scaled', 4,  7.3,-10,10,'logistic')}
 
         # Output dictionary will be saved
         self.output = {}
@@ -252,9 +252,10 @@ class mwfit():
 
         # Gaia selection function applied
         if self.sf_bool:
+            print('Getting Selectionfunction pars')
             if self.sub_sf: fid_pars['gsf_pars'] = sf_utils.get_subgaiasf_pars(theta=fid_pars['lat_min'], nskip=2, _nside=64, **gsf_kwargs)
             else: fid_pars['gsf_pars'] = sf_utils.get_gaiasf_pars(theta=fid_pars['lat_min'], nskip=2, _nside=64, **gsf_kwargs)
-
+        print('Got Selectionfunction pars')
         self.fid_pars=fid_pars
 
     def _generate_kwargs(self, p0=None):
@@ -457,7 +458,7 @@ def maximize(p0, p0_idx=False, verbose=False, **kwargs):
     return res
 
 
-def poisson_like(params, bounds=None, grad=False):
+def poisson_like(params, bounds=None, grad=False, test=False):
 
     poisson_kwargs = copy(poisson_kwargs_global)
 
@@ -485,6 +486,7 @@ def poisson_like(params, bounds=None, grad=False):
         raise
 
     if not grad:
+        if test: return obj, integral, prior
         model_val = np.sum(obj) - integral + prior
         if np.isnan(model_val):
             print('Nan lnp: ', params)
@@ -563,7 +565,6 @@ def poisson_like_parallel(params, bounds=None):
     global lnprob_iteration
     lnprob_iteration = logl_val - integral[0] + prior[0]
     return logl_val - integral[0] + prior[0], logl_grad - integral[1] + prior[1]
-
 
 def int_idx(i):
     if i in np.arange(10).astype(str):
