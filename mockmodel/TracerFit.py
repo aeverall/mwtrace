@@ -21,7 +21,7 @@ poisson_kwargs_global = {}
 
 class mwfit():
 
-    def __init__(self, components=['disk','disk','halo'], free_pars={}, fixed_pars={}, sample={}, sf_bool=False, perr_bool=False):
+    def __init__(self, components=['disk','disk','halo'], free_pars={}, fixed_pars={}, sample={}, sf_bool=False, perr_bool=False, sub_sf=False):
 
 
         self.components=components
@@ -31,6 +31,7 @@ class mwfit():
 
         self.sf_bool = sf_bool
         self.perr_bool = perr_bool
+        self.sub_sf = sub_sf
 
         # Function for recording progress
         self.tqdm = tqdm.tqdm
@@ -216,7 +217,7 @@ class mwfit():
 
         return params
 
-    def _generate_fid_pars(self, sub=False, **gsf_kwargs):
+    def _generate_fid_pars(self, **gsf_kwargs):
 
         fid_pars = {'Mmax':self.fixed_pars['Mx'],  'lat_min':np.deg2rad(self.fixed_pars['theta_deg']), 'R0':self.fixed_pars['R0'],
                     'free_pars':{}, 'fixed_pars':{par:self.fixed_pars[par] for par in ['Mx','theta_deg','R0']},
@@ -251,8 +252,8 @@ class mwfit():
 
         # Gaia selection function applied
         if self.sf_bool:
-            if sub: fid_pars['gsf_pars'] = sf_utils.get_subgaiasf_pars(theta=fid_pars['lat_min'], nskip=2, _nside=64, **gsf_kwargs)
-            else: fid_pars['gsf_pars'] = sf_utils.get_gaiasf_pars(theta=fid_pars['lat_min'], nskip=2, _nside=64)
+            if self.sub_sf: fid_pars['gsf_pars'] = sf_utils.get_subgaiasf_pars(theta=fid_pars['lat_min'], nskip=2, _nside=64, **gsf_kwargs)
+            else: fid_pars['gsf_pars'] = sf_utils.get_gaiasf_pars(theta=fid_pars['lat_min'], nskip=2, _nside=64, **gsf_kwargs)
 
         self.fid_pars=fid_pars
 
@@ -281,8 +282,9 @@ class mwfit():
             self.poisson_kwargs['sample'] = sample_2d
             self.poisson_kwargs['model_integrate'] = dh_msto.integral_model
         elif self.sf_bool:
-            self.poisson_kwargs['sample'] = sample_2d.T[self.sample['gaiasf_subset']].T
-            self.poisson_kwargs['model_integrate'] = dh_msto.integral_model_gaiaSF_grad
+            self.poisson_kwargs['sample'] = sample_2d.T[self.sample['sf_subset']].T
+            if not self.sub_sf: self.poisson_kwargs['model_integrate'] = dh_msto.integral_model_gaiaSF_grad
+            else: self.poisson_kwargs['model_integrate'] = dh_msto.integral_model_subgaiaSF_grad
 
         self._global()
 
@@ -327,7 +329,7 @@ class mwfit():
 
         # Identifiers of used sources
         self.output['source_id'] = self.sample['source_id']
-        try: self.output['gaiasf_subset'] = self.sample['gaiasf_subset']
+        try: self.output['sf_subset'] = self.sample['sf_subset']
         except KeyError: pass
         # Dictionary of parameters
         if true_pars is not None: self.output['true_pars'] = true_pars
@@ -492,7 +494,6 @@ def poisson_like(params, bounds=None, grad=False):
     elif grad:
         model_val = np.sum(obj[0]) - integral[0] + prior[0]
         model_grad = np.sum(obj[1], axis=1) - integral[1] + prior[1]
-        print(integral)
         if np.isnan(model_val): print('Nan lnp: ', params)
         # if np.sum(np.abs(model_grad))>1e5:
         #     print(model_val)
