@@ -379,7 +379,8 @@ class mwfit():
         for par in ['Mms','Mms1','Mms2']:
             self.fixed_pars[par] = self.fixed_pars[0][par]
 
-        self.optimize_results = data['optimize']
+        try: self.optimize_results = data['optimize']
+        except KeyError: pass
         self.mcmc_results = data['mcmc']
 
         self.sample={}
