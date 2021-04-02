@@ -495,6 +495,7 @@ def poisson_like(params, bounds=None, grad=False, test=False):
         return model_val
 
     elif grad:
+        if test: return np.sum(obj[0]), - integral[0], prior[0], np.sum(obj[1], axis=1), - integral[1], prior[1]
         model_val = np.sum(obj[0]) - integral[0] + prior[0]
         model_grad = np.sum(obj[1], axis=1) - integral[1] + prior[1]
         if np.isnan(model_val): print('Nan lnp: ', params)
@@ -502,6 +503,8 @@ def poisson_like(params, bounds=None, grad=False, test=False):
         #     print(model_val)
         #     print(model_grad)
         #     print(params)
+        # return np.sum(obj[1], axis=1), -integral[1], prior[1]
+
         return model_val, model_grad
 
 global params_iteration

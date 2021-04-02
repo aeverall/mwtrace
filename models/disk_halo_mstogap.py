@@ -239,7 +239,7 @@ def log_halomodel_grad(pi_mu, abs_sin_lat, m_mu, M, log_pi_mu, hz=1., alpha1=-1.
     return log_lambda, grad_lambda.T#np.exp(log_lambda)*grad_lambda.T
 
 
-def logmodel_perr_grad(sample, params, gmm=None, fid_pars=None, grad=False):
+def logmodel_perr_grad(sample, params, gmm=None, fid_pars=None, grad=False, degree=20):
 
     # Observables
     pi_mu, pi_err, abs_sin_lat, log_cos_lat, m_mu, log_pi_err = sample
@@ -265,7 +265,7 @@ def logmodel_perr_grad(sample, params, gmm=None, fid_pars=None, grad=False):
                                                 Mms1=transformed_params[j]['Mms1'],
                                                 Mms2=transformed_params[j]['Mms2'],
                                                 Mto=transformed_params[j]['Mto'],
-                                                Mx=Mx, R0=R0, grad=grad)
+                                                Mx=Mx, R0=R0, grad=grad, degree=degree)
 
         weights[j] = transformed_params[j]['w']
         if not grad:  logcmpts[:,j] = output
@@ -304,7 +304,7 @@ def logmodel_perr_grad(sample, params, gmm=None, fid_pars=None, grad=False):
     return logsumcmpts + 2*np.log(np.tan(theta)) + log_cos_lat, (grad_model.T*jacobian).T
 
 def log_expmodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
-                                Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, degree=21, grad=False):
+                                Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, degree=20, grad=False, integral_test=False):
 
     ep1=1.3; ep2=2.3;
     a1=-ln10*(ep1-1)/(2.5*alpha1); a2=-ln10*(ep2-1)/(2.5*alpha2);
@@ -336,6 +336,9 @@ def log_expmodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., 
                   log_Ams - np.log(a2) + alpha2*(Mms+10-m_mu),
                   log_Ams + np.log(Ag) + alphag*(Mms+10-m_mu),
                   log_Ams - np.log(a1) + alpha1*(Mms+10-m_mu)]
+
+    if integral_test:
+        return [beta, Mag_n, pi_mu, pi_err], Mag_norm, Mag_bounds
 
     p_model = np.zeros((4, len(pi_mu)))
     if grad:
@@ -462,7 +465,7 @@ def expmodel_perr_d2logIJ_dp2_dn(p, beta, n, mu, err, transform='none', b=None, 
     elif transform=='logit_ab': return d2logI_dp2 - 1/(p-a)**2 - 1/(p-b)**2
 
 def log_halomodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
-                                Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, degree=21, grad=False):
+                                Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, degree=20, grad=False, integral_test=False):
 
     ep1=1.3; ep2=2.3;
     a1=-ln10*(ep1-1)/(2.5*alpha1); a2=-ln10*(ep2-1)/(2.5*alpha2);
@@ -493,6 +496,9 @@ def log_halomodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1.,
                   log_Ams - np.log(a2) + alpha2*(Mms+10-m_mu),
                   log_Ams + np.log(Ag) + alphag*(Mms+10-m_mu),
                   log_Ams - np.log(a1) + alpha1*(Mms+10-m_mu)]
+
+    if integral_test:
+        return [beta, Mag_n, hz, pi_mu, pi_err], Mag_norm, Mag_bounds
 
     p_model = np.zeros((4, len(pi_mu)))
     if grad:
