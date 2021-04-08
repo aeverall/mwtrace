@@ -21,7 +21,7 @@ poisson_kwargs_global = {}
 
 class mwfit():
 
-    def __init__(self, components=['disk','disk','halo'], free_pars={}, fixed_pars={}, sample={}, sf_bool=False, perr_bool=False, sub_sf=False):
+    def __init__(self, components=['disk','disk','halo'], free_pars={}, fixed_pars={}, sample={}, sf_bool=False, perr_bool=False, sub_sf=False, param_trans=None):
 
 
         self.components=components
@@ -48,24 +48,28 @@ class mwfit():
         # dropoff
         self.dropoff=1000
 
-        # Transformations
-        # transform, p1, p2, lower bound, upper bound
-        self.param_trans = {}
-        a_dirichlet = 2
-        self.param_trans['shd'] = {'alpha1':('nexp',0,0,-5,3,'none'),
-                              'alpha2':('nexp',0,0,-5,3,'none')}
-        self.param_trans[0] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
-                          'fD': ('logit_scaled', 0,1, -10,10,'logistic'),
-                          'alpha3':('nexp',0,0,-5,3,'none'),
-                          'hz': ('logit_scaled', 0.1,  1.2,-10,10,'logistic')}
-        self.param_trans[1] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
-                          'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
-                          'alpha3':('nexp',0,0,-5,3,'none'),
-                          'hz': ('logit_scaled', 1.2,3,-10,10,'logistic')}
-        self.param_trans[2] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
-                          'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
-                          'alpha3':('nexp',0,0,-5,3,'none'),
-                          'hz': ('logit_scaled', 4,  7.3,-10,10,'logistic')}
+        if not param_trans is None:
+            self.param_trans=param_trans
+        else:
+            # Transformations
+            # transform, p1, p2, lower bound, upper bound
+            self.param_trans = {}
+            a_dirichlet = 4
+            self.param_trans['shd'] = {'alpha1':('nexp',0,0,-5,3,'none'),
+                                  'alpha2':('nexp',0,0,-5,3,'none')}
+            self.param_trans[0] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
+                              'fD': ('logit_scaled', 0,1, -10,10,'logistic'),
+                              'alpha3':('nexp',0,0,-5,3,'none'),
+                              'hz': ('logit_scaled', 0.1,  1.2,-10,10,'logistic')}
+            self.param_trans[1] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
+                              'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
+                              'alpha3':('nexp',0,0,-5,3,'none'),
+                              'hz': ('logit_scaled', 1.2,3,-10,10,'logistic')}
+            self.param_trans[2] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
+                              'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
+                              'alpha3':('nexp',0,0,-5,3,'none'),
+                              'hz': ('logit_scaled', 4,  7.3,-10,10,'logistic')}
+        #print(self.param_trans)
 
         # Output dictionary will be saved
         self.output = {}
@@ -144,9 +148,6 @@ class mwfit():
 
         p0 = np.array([self.renormalise(p0[i]) for i in range(niter)])
 
-        global lnprob_iteration
-        lnprob_iteration=-99
-
         global poisson_kwargs_global
         poisson_kwargs_global['chunksize']=1000
         poisson_kwargs_global['grad']=True
@@ -154,8 +155,10 @@ class mwfit():
 
         result = np.zeros(p0.shape); lnprob = np.zeros(niter); i=0
         for ii in range(niter):
-            global Nfeval
-            Nfeval=1;
+            global Nfeval; Nfeval=0;
+            global lnprob_iteration; lnprob_iteration=nloglikelihood_chunk(p0[ii])[0]
+            printx_lnp(p0[ii]); print('')
+
             res = scipy.optimize.minimize(nloglikelihood_chunk, p0[ii], method=method, jac=True, bounds=self.bounds.T, options=minimize_options, callback=printx_lnp)
             result[ii] = res['x']
             lnprob[ii] =-res['fun']
@@ -497,6 +500,7 @@ def poisson_like(params, bounds=None, grad=False, test=False):
     elif grad:
         model_val = np.sum(obj[0]) - integral[0] + prior[0]
         model_grad = np.sum(obj[1], axis=1) - integral[1] + prior[1]
+        if test: return np.sum(obj[0]), - integral[0], prior[0], np.sum(obj[1], axis=1), - integral[1], prior[1]
         if np.isnan(model_val): print('Nan lnp: ', params)
         # if np.sum(np.abs(model_grad))>1e5:
         #     print(model_val)
@@ -579,7 +583,8 @@ def printx(Xi):
     Nfeval += 1
 def printx_lnp(Xi):
     global Nfeval
-    sys.stdout.write('At iterate {0}, {1}'.format(Nfeval, lnprob_iteration) + '\r')
+    sys.stdout.write('At iterate {0}, {1}, '.format(Nfeval, lnprob_iteration) + ','.join(["{:.2f}".format(X) for X in Xi]) + '        \r')
+    sys.stdout.flush()
     Nfeval += 1
 def printx_set(Xi):
     global opt_id

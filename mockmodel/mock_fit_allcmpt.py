@@ -26,9 +26,8 @@ if __name__=='__main__':
     times = []; checkpoints = []
     times.append(time.time()); checkpoints.append('start')
 
-    run_id=6
-
-    size = 110000
+    run_id=12
+    size = 100000
     file = "sample_1m"
     # Load Sample
     sample = {}; true_pars={}; latent_pars={};
@@ -71,34 +70,108 @@ if __name__=='__main__':
     true_pars = true_pars
     sample = sample
 
-    message = f"""\n{run_id:03d} ---> Sample size: {size:d}, SF subset: {np.sum(sample['gaiasf_subset']):d}
-         fD and alpha3 free - 14 free parameters. perr gradient evaluation made numerically.
-         ftol=1e-12, gtol=1e-7. When lnp=nan in mcmc - return 1e-20.
-         Parallax error from ASF.
-         Astrometry Selection Function."""
+    message = f"""\n{run_id:03d} ---> Sample size: {size:d}, SF subset: {np.sum(sample['gaiasf_subset']):d}, SF ast subset: {np.sum(sample['astsf_subset']):d}
+                 DEBUG - running gradient descent only.
+                 fD and alpha3 free - 14 free parameters. hz_halo limited [4,7.3]. all alpha3 fixed. dirichlet alpha=2.
+                 perr gradient evaluation made numerically.
+                 ftol=1e-12, gtol=1e-7. When lnp=nan in mcmc - return 1e-20.
+                 Parallax error from ASF.
+                 w/ Astrometry Selection Function."""
     with open(f'/data/asfe2/Projects/mwtrace_data/mockmodel/messages.txt', 'a') as f:
         f.write(message)
     print(message)
 
     free_pars = {}
-    free_pars[0] = ['w', 'hz', 'fD', 'alpha3']
-    free_pars[1] = ['w', 'hz', 'fD', 'alpha3']
-    free_pars[2] = ['w', 'hz', 'fD', 'alpha3']
+    free_pars[0] = ['w', 'hz', 'fD']#, 'alpha3']
+    free_pars[1] = ['w', 'hz', 'fD']#, 'alpha3']
+    free_pars[2] = ['w', 'hz', 'fD']#, 'alpha3']
     free_pars['shd'] = ['alpha1', 'alpha2']
     print("Free parameters: ", free_pars)
+
+    # Transformations
+    # transform, p1, p2, lower bound, upper bound
+    param_trans = {}
+    a_dirichlet = 2
+    param_trans['shd'] = {'alpha1':('nexp',0,0,-5,3,'none'),
+                          'alpha2':('nexp',0,0,-5,3,'none')}
+    param_trans[0] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
+                      'fD': ('logit_scaled', 0,1, -10,10,'logistic'),
+                      'alpha3':('nexp',0,0,-3,3,'none'),
+                      'hz': ('logit_scaled', 0.1,  1.2,-10,10,'logistic')}
+    param_trans[1] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
+                      'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
+                      'alpha3':('nexp',0,0,-3,3,'none'),
+                      'hz': ('logit_scaled', 1.2,3,-10,10,'logistic')}
+    param_trans[2] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
+                      'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
+                      'alpha3':('nexp',0,0,-1,0,'none'),
+                      'hz': ('logit_scaled', 4,  7.3,-10,10,'logistic')}
 
     times.append(time.time()); checkpoints.append('initialised')
 
     nstep_all=5000
-    if False:
+    if True:
+        save_file = f'/data/asfe2/Projects/mwtrace_data/mockmodel/mock_{file}_{size:d}_sf_perr_{run_id:03d}.h'
+        if os.path.exists(save_file):
+            raise ValueError('File %s already exists...')
+
+        model_sf_err = mwfit(free_pars=free_pars, fixed_pars=true_pars, sample=sample, sf_bool=True, perr_bool=True, sub_sf=True, param_trans=param_trans)
+        model_sf_err.sample['sf_subset'] = sample['astsf_subset'].copy()
+        #model_sf_err.sample['sf_subset'] = sample['gaiasf_subset'].copy()
+        model_sf_err._generate_fid_pars(dr2_sf=dr2_sf, sub_sf=ast_sf, _m_grid=np.arange(0., 22.1, 0.1))
+        model_sf_err._generate_kwargs()
+        print('bounds:\n', model_sf_err.poisson_kwargs['param_bounds'])
+
+        # Sample from prior
+        model_sf_err.mcmc_prior()
+        # Check true parameters
+        true_params_f = model_sf_err.transform_params(model_sf_err.get_true_params(true_pars))
+        print("True likelihood: ", model_sf_err.evaluate_likelihood(true_params_f))
+        print(true_params_f, end="\n")
+        # Optimize with BFGS
+        model_sf_err.optimize_chunk(niter=10, ncores=40, label='sf_perr_bfgs', method='L-BFGS-B', verbose=True, minimize_options={'disp':False, 'ftol':1e-12, 'gtol':1e-7})
+        # Run MCMC
+        model_sf_err.mcmc(ncores=40, nsteps=nstep_all, label='sf_perr_mcmc', optimize_label='sf_perr_bfgs')
+        # Save results
+        model_sf_err.save(save_file, true_pars, mode='w')
+
+        times.append(time.time()); checkpoints.append('SF and parallax error')
+
+    if True:
+        save_file = f'/data/asfe2/Projects/mwtrace_data/mockmodel/mock_{file}_{size:d}_sfast_{run_id:03d}.h'
+        if os.path.exists(save_file):
+            raise ValueError('File %s already exists...')
+
+        model_sf = mwfit(free_pars=free_pars, fixed_pars=true_pars, sample=sample, sf_bool=True, perr_bool=False, sub_sf=True, param_trans=param_trans)
+        model_sf.sample['sf_subset'] = sample['astsf_subset'].copy()
+        model_sf._generate_fid_pars(dr2_sf=dr2_sf, sub_sf=ast_sf, _m_grid=np.arange(0., 22.1, 0.1))
+        model_sf._generate_kwargs()
+        print('bounds:\n', model_sf.poisson_kwargs['param_bounds'])
+
+        # Sample from prior
+        model_sf.mcmc_prior()
+        # Check true parameters
+        true_params_f = model_sf.transform_params(model_sf.get_true_params(true_pars))
+        print("True likelihood: ", model_sf.evaluate_likelihood(true_params_f))
+        print(true_params_f, end="\n")
+        # Optimize with BFGS
+        model_sf.optimize_parallel(niter=10, ncores=10, label='sf_bfgs', method='L-BFGS-B', verbose=True, minimize_options={'disp':False})
+        # Run MCMC
+        model_sf.mcmc(ncores=20, nsteps=nstep_all, label='sf_mcmc', optimize_label='sf_bfgs')
+        # Save results
+        model_sf.save(save_file, true_pars, mode='w')
+
+        times.append(time.time()); checkpoints.append('Astrometry SF selected')
+
+    if True:
         save_file = f'/data/asfe2/Projects/mwtrace_data/mockmodel/mock_{file}_{size:d}_full_{run_id:03d}.h'
         if os.path.exists(save_file):
             raise ValueError('File %s already exists...')
 
-        model_full = mwfit(free_pars=free_pars, fixed_pars=true_pars, sample=sample, sf_bool=False, perr_bool=False)
+        model_full = mwfit(free_pars=free_pars, fixed_pars=true_pars, sample=sample, sf_bool=False, perr_bool=False, param_trans=param_trans)
         model_full._generate_fid_pars()
         model_full._generate_kwargs()
-        print('bounds', model_full.poisson_kwargs['param_bounds'])
+        print('bounds:\n', model_full.poisson_kwargs['param_bounds'])
         # Sample from prior
         model_full.mcmc_prior()
         # Check true parameters
@@ -106,7 +179,7 @@ if __name__=='__main__':
         print("True likelihood: ", model_full.evaluate_likelihood(true_params_f))
         print(true_params_f, end="\n")
         # Optimize with BFGS
-        model_full.optimize_parallel(niter=5, ncores=5, label='full_bfgs', method='L-BFGS-B', verbose=True, minimize_options={'disp':False})
+        model_full.optimize_parallel(niter=10, ncores=10, label='full_bfgs', method='L-BFGS-B', verbose=True, minimize_options={'disp':False})
         # Run MCMC
         model_full.mcmc(ncores=20, nsteps=nstep_all, label='full_mcmc', optimize_label='full_bfgs')
         # Save results
@@ -114,16 +187,37 @@ if __name__=='__main__':
 
         times.append(time.time()); checkpoints.append('full sample')
 
+    if True:
+        save_file = f'/data/asfe2/Projects/mwtrace_data/mockmodel/mock_{file}_{size:d}_sf_perrHOT_{run_id:03d}.h'
+        if os.path.exists(save_file):
+            raise ValueError('File %s already exists...')
+
+        model_sf_err = mwfit(free_pars=free_pars, fixed_pars=true_pars, sample=sample, sf_bool=True, perr_bool=True, sub_sf=True, param_trans=param_trans)
+        model_sf_err.sample['sf_subset'] = sample['astsf_subset'].copy()
+        model_sf_err._generate_fid_pars(dr2_sf=dr2_sf, sub_sf=ast_sf, _m_grid=np.arange(0., 22.1, 0.1))
+        model_sf_err._generate_kwargs()
+        print('bounds:\n', model_sf_err.poisson_kwargs['param_bounds'])
+        # Check true parameters
+        true_params_f = model_sf_err.transform_params(model_sf_err.get_true_params(true_pars))
+        print("True likelihood: ", model_sf_err.evaluate_likelihood(true_params_f))
+        print(true_params_f, end="\n")
+        # Run MCMC
+        model_sf_err.mcmc(ncores=40, p0=true_params_f, nsteps=1000, label='sf_perr_mcmc', optimize_label='sf_perr_bfgs')
+        # Save results
+        model_sf_err.save(save_file, true_pars, mode='w')
+
+        times.append(time.time()); checkpoints.append('SF and parallax error HOT')
+
     if False: ### Original SF method
         save_file = f'/data/asfe2/Projects/mwtrace_data/mockmodel/mock_{file}_{size:d}_sf_{run_id:03d}.h'
         if os.path.exists(save_file):
             raise ValueError('File %s already exists...')
 
-        model_sf = mwfit(free_pars=free_pars, fixed_pars=true_pars, sample=sample, sf_bool=True, perr_bool=False)
+        model_sf = mwfit(free_pars=free_pars, fixed_pars=true_pars, sample=sample, sf_bool=True, perr_bool=False, param_trans=param_trans)
         model_sf.sample['sf_subset'] = sample['gaiasf_subset'].copy()
         model_sf._generate_fid_pars(dr2_sf=dr2_sf)
         model_sf._generate_kwargs()
-        print('bounds', model_sf.poisson_kwargs['param_bounds'])
+        print('bounds:\n', model_sf.poisson_kwargs['param_bounds'])
         # Sample from prior
         model_sf.mcmc_prior()
         # Check true parameters
@@ -144,11 +238,11 @@ if __name__=='__main__':
         if os.path.exists(save_file):
             raise ValueError('File %s already exists...')
 
-        model_sf = mwfit(free_pars=free_pars, fixed_pars=true_pars, sample=sample, sf_bool=True, perr_bool=False, sub_sf=True)
+        model_sf = mwfit(free_pars=free_pars, fixed_pars=true_pars, sample=sample, sf_bool=True, perr_bool=False, sub_sf=True, param_trans=param_trans)
         model_sf.sample['sf_subset'] = sample['gaiasf_subset'].copy()
         model_sf._generate_fid_pars(dr2_sf=dr2_sf, _m_grid=np.arange(0., 22.1, 0.1))
         model_sf._generate_kwargs()
-        print('bounds', model_sf.poisson_kwargs['param_bounds'])
+        print('bounds:\n', model_sf.poisson_kwargs['param_bounds'])
 
         # Sample from prior
         model_sf.mcmc_prior()
@@ -164,84 +258,6 @@ if __name__=='__main__':
         model_sf.save(save_file, true_pars, mode='w')
 
         times.append(time.time()); checkpoints.append('SF selected')
-
-    if False:
-        save_file = f'/data/asfe2/Projects/mwtrace_data/mockmodel/mock_{file}_{size:d}_sfast_{run_id:03d}.h'
-        if os.path.exists(save_file):
-            raise ValueError('File %s already exists...')
-
-        model_sf = mwfit(free_pars=free_pars, fixed_pars=true_pars, sample=sample, sf_bool=True, perr_bool=False, sub_sf=True)
-        model_sf.sample['sf_subset'] = sample['astsf_subset'].copy()
-        model_sf._generate_fid_pars(dr2_sf=dr2_sf, sub_sf=ast_sf, _m_grid=np.arange(0., 22.1, 0.1))
-        model_sf._generate_kwargs()
-        print('bounds', model_sf.poisson_kwargs['param_bounds'])
-
-        # Sample from prior
-        model_sf.mcmc_prior()
-        # Check true parameters
-        true_params_f = model_sf.transform_params(model_sf.get_true_params(true_pars))
-        print("True likelihood: ", model_sf.evaluate_likelihood(true_params_f))
-        print(true_params_f, end="\n")
-        # Optimize with BFGS
-        model_sf.optimize_parallel(niter=5, ncores=5, label='sf_bfgs', method='L-BFGS-B', verbose=True, minimize_options={'disp':False})
-        # Run MCMC
-        model_sf.mcmc(ncores=20, nsteps=nstep_all, label='sf_mcmc', optimize_label='sf_bfgs')
-        # Save results
-        model_sf.save(save_file, true_pars, mode='w')
-
-        times.append(time.time()); checkpoints.append('Astrometry SF selected')
-
-    if False:
-        save_file = f'/data/asfe2/Projects/mwtrace_data/mockmodel/mock_{file}_{size:d}_sf_perr_{run_id:03d}.h'
-        if os.path.exists(save_file):
-            raise ValueError('File %s already exists...')
-
-        model_sf_err = mwfit(free_pars=free_pars, fixed_pars=true_pars, sample=sample, sf_bool=True, perr_bool=True, sub_sf=True)
-        model_sf_err.sample['sf_subset'] = sample['astsf_subset'].copy()
-        model_sf_err._generate_fid_pars(dr2_sf=dr2_sf, sub_sf=ast_sf, _m_grid=np.arange(0., 22.1, 0.1))
-        model_sf_err._generate_kwargs()
-        print('bounds', model_sf_err.poisson_kwargs['param_bounds'])
-
-        # Sample from prior
-        model_sf_err.mcmc_prior()
-        # Check true parameters
-        true_params_f = model_sf_err.transform_params(model_sf_err.get_true_params(true_pars))
-        print("True likelihood: ", model_sf_err.evaluate_likelihood(true_params_f))
-        print(true_params_f, end="\n")
-        # Optimize with BFGS
-        model_sf_err.optimize_chunk(niter=5, ncores=40, label='sf_perr_bfgs', method='L-BFGS-B', verbose=True, minimize_options={'disp':False, 'ftol':1e-12, 'gtol':1e-7})
-        # model_sf_err.optimize_results['x']['sf_perr_bfgs'] = np.array([[  9.02373448,   0.06519842,   2.87247407,   0.20566405,
-        #                                              10.3484506 ,  -0.99045504,   7.80286892,  -5.        ,
-        #                                              18.93727588, -10.        ,  -1.29237893,  -5.        ,
-        #                                             -1.46861251,  -0.51517986]])
-        # model_sf_err.optimize_results['lnp']['sf_perr_bfgs'] = np.array([206000])
-        # Run MCMC
-        model_sf_err.mcmc(ncores=40, nsteps=nstep_all, label='sf_perr_mcmc', optimize_label='sf_perr_bfgs')
-        # Save results
-        model_sf_err.save(save_file, true_pars, mode='w')
-
-        times.append(time.time()); checkpoints.append('SF and parallax error')
-
-    if True:
-        save_file = f'/data/asfe2/Projects/mwtrace_data/mockmodel/mock_{file}_{size:d}_sf_perrHOT_{run_id:03d}.h'
-        if os.path.exists(save_file):
-            raise ValueError('File %s already exists...')
-
-        model_sf_err = mwfit(free_pars=free_pars, fixed_pars=true_pars, sample=sample, sf_bool=True, perr_bool=True, sub_sf=True)
-        model_sf_err.sample['sf_subset'] = sample['astsf_subset'].copy()
-        model_sf_err._generate_fid_pars(dr2_sf=dr2_sf, sub_sf=ast_sf, _m_grid=np.arange(0., 22.1, 0.1))
-        model_sf_err._generate_kwargs()
-        print('bounds', model_sf_err.poisson_kwargs['param_bounds'])
-        # Check true parameters
-        true_params_f = model_sf_err.transform_params(model_sf_err.get_true_params(true_pars))
-        print("True likelihood: ", model_sf_err.evaluate_likelihood(true_params_f))
-        print(true_params_f, end="\n")
-        # Run MCMC
-        model_sf_err.mcmc(ncores=40, p0=true_params_f, nsteps=nstep_all, label='sf_perr_mcmc', optimize_label='sf_perr_bfgs')
-        # Save results
-        model_sf_err.save(save_file, true_pars, mode='w')
-
-        times.append(time.time()); checkpoints.append('SF and parallax error HOT')
 
     [print(f"Time {checkpoints[i+1]}: {(times[i+1]-times[i]):.0f}s") for i in range(len(checkpoints)-1)]
     print(f"Total: {times[-1]-times[0]}")
