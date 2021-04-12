@@ -62,11 +62,18 @@ def run_mcmc_global(p0, poisson_like, bounds, nstep=1000, ncores=1, tqdm_foo=tqd
 
     ndim=p0.shape[0]
 
-    # print('bounds', bounds)
-    # print('p0', p0)
-    # print('p0walker', np.random.normal(p0, np.abs(bounds[1]-bounds[0]).astype(float)/100000))
-    if initialise: nwalkers=ndim*4; p0_walkers = np.random.normal(p0, np.abs(bounds[1]-bounds[0]).astype(float)/100000, size=(nwalkers,ndim))
-    else: nwalkers=p0.shape[1]; p0_walkers = p0.copy().T
+    if initialise:
+        nwalkers=ndim*4;
+        i_init=0;
+        p0_bound=np.ones(nwalkers, dtype=bool)
+        p0_walkers = np.zeros((nwalkers,ndim))
+        while np.sum(p0_bound)>0:
+            p0_walkers[p0_bound] = np.random.normal(p0, np.abs(bounds[1]-bounds[0]).astype(float)/100000, size=(np.sum(p0_bound),ndim))
+            p0_bound = (np.sum((p0_walkers<=bounds[0])|(p0_walkers>=bounds[1]), axis=1)>0).astype(bool)
+            if i_init%10==0: print('Bad parameter initialisation: i=%d, nbad=%d' % (i_init, np.sum(p0_bound)))
+            i_init+=1
+    else:
+        nwalkers=p0.shape[1]; p0_walkers = p0.copy().T
 
     with Pool(ncores) as pool:
         sampler = emcee.EnsembleSampler(nwalkers, ndim, poisson_like, pool=pool)

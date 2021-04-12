@@ -75,9 +75,9 @@ def get_gaiasf_pars(theta=np.pi/3, nskip=2, _nside=64, dr2_sf=None):
     uni_n_pixels, idx_n_pixels = np.unique(_n_pixels, return_inverse=True)
 
     # Bin in sinb and get unique sinb bins
-    _sinb_bins = np.linspace(np.sin(np.pi/3), 1, 11); _sinb_vals = (_sinb_bins[1:] + _sinb_bins[:-1])/2
-    _sinb_pixels = _sinb_vals[((np.sin(np.deg2rad(_b_pixels)) - np.sin(np.pi/3) )\
-                               /(1-np.sin(np.pi/3)) * 10).astype(int)]
+    _sinb_bins = np.linspace(np.sin(theta), 1, 11); _sinb_vals = (_sinb_bins[1:] + _sinb_bins[:-1])/2
+    _sinb_pixels = _sinb_vals[((np.sin(np.deg2rad(_b_pixels)) - np.sin(theta) )\
+                               /(1-np.sin(theta)) * 10).astype(int)]
     uni_sinb_pixels, idx_sinb_pixels = np.unique(_sinb_pixels, return_inverse=True)
 
     # Solution grid
@@ -140,6 +140,7 @@ def get_subgaiasf_pars(theta=np.pi/3, nskip=2, _nside=64, dr2_sf=None, sub_sf=No
     hp_gal=hp_eq.galactic
     hp_l=hp_gal.l.deg; hp_b=np.abs(hp_gal.b.deg)
 
+    print('Higher Res:')
     # HEALPix at high res
     nside_highres=1024
     rapix, decpix = hp.pix2ang(nside_highres, np.arange(hp.nside2npix(nside_highres)), lonlat=True, nest=True)
@@ -153,9 +154,9 @@ def get_subgaiasf_pars(theta=np.pi/3, nskip=2, _nside=64, dr2_sf=None, sub_sf=No
     pixel_id = np.arange(hp.nside2npix(_nside))[pixweight>0]
 
     # Bin in sinb and get unique sinb bins
-    _sinb_bins = np.linspace(np.sin(np.pi/3), 1, 11); _sinb_vals = (_sinb_bins[1:] + _sinb_bins[:-1])/2
-    _sinb_pixels = _sinb_vals[((np.sin(np.deg2rad(_b_pixels)) - np.sin(np.pi/3) )\
-                               /(1-np.sin(np.pi/3)) * 10).astype(int)]
+    _sinb_bins = np.linspace(np.sin(theta), 1, 11); _sinb_vals = (_sinb_bins[1:] + _sinb_bins[:-1])/2
+    _sinb_pixels = _sinb_vals[((np.sin(np.deg2rad(_b_pixels)) - np.sin(theta) )\
+                               /(1-np.sin(theta)) * 10).astype(int)]
     uni_sinb_pixels, idx_sinb_pixels = np.unique(_sinb_pixels, return_inverse=True)
 
 
@@ -163,6 +164,7 @@ def get_subgaiasf_pars(theta=np.pi/3, nskip=2, _nside=64, dr2_sf=None, sub_sf=No
     gg, bb = np.meshgrid(_m_grid, hp_b[pixel_id])
     coords = Source(ll, bb, unit='deg', frame='galactic', photometry={'gaia_g':gg})
 
+    print('Gaia SF:')
     # Gaia SFprob:
     _n_pixels = np.median(dr2_sf._n_field.reshape(-1, int(4096/_nside)**2), axis=1).astype(int)[pixweight>0]
     _alpha, _beta = dr2_sf._alpha_interpolator(_m_grid), dr2_sf._beta_interpolator(_m_grid)
@@ -172,6 +174,7 @@ def get_subgaiasf_pars(theta=np.pi/3, nskip=2, _nside=64, dr2_sf=None, sub_sf=No
     _beta,_=np.meshgrid(_beta, _n_pixels)
     _m,_n=np.meshgrid(_m_grid, _n_pixels)
     _sfprob = gaia_sf(_alpha, _beta, _n, _m)
+    print('Ast SF:', gg.shape)
     # Sub SF prob
     if sub_sf is not None: _sfprob *= sub_sf(coords)
 

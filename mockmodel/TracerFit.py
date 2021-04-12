@@ -21,7 +21,7 @@ poisson_kwargs_global = {}
 
 class mwfit():
 
-    def __init__(self, components=['disk','disk','halo'], free_pars={}, fixed_pars={}, sample={}, sf_bool=False, perr_bool=False):
+    def __init__(self, components=['disk','disk','halo'], free_pars={}, fixed_pars={}, sample={}, sf_bool=False, perr_bool=False, sub_sf=False):
 
 
         self.components=components
@@ -31,6 +31,7 @@ class mwfit():
 
         self.sf_bool = sf_bool
         self.perr_bool = perr_bool
+        self.sub_sf = sub_sf
 
         # Function for recording progress
         self.tqdm = tqdm.tqdm
@@ -64,7 +65,7 @@ class mwfit():
         self.param_trans[2] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
                           'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
                           'alpha3':('nexp',0,0,-5,3,'none'),
-                          'hz': ('logit_scaled', 3,  7.3,-10,10,'logistic')}
+                          'hz': ('logit_scaled', 4,  7.3,-10,10,'logistic')}
 
         # Output dictionary will be saved
         self.output = {}
@@ -171,6 +172,7 @@ class mwfit():
 
         if p0 is None:
             p0 = self.optimize_results['x'][optimize_label][np.argmax(self.optimize_results['lnp'][optimize_label])]
+        print('p0 = ', p0)
 
         self._generate_kwargs(p0=p0, **model_kwargs)
 
@@ -215,7 +217,7 @@ class mwfit():
 
         return params
 
-    def _generate_fid_pars(self, sub=False, **gsf_kwargs):
+    def _generate_fid_pars(self, **gsf_kwargs):
 
         fid_pars = {'Mmax':self.fixed_pars['Mx'],  'lat_min':np.deg2rad(self.fixed_pars['theta_deg']), 'R0':self.fixed_pars['R0'],
                     'free_pars':{}, 'fixed_pars':{par:self.fixed_pars[par] for par in ['Mx','theta_deg','R0']},
@@ -250,9 +252,10 @@ class mwfit():
 
         # Gaia selection function applied
         if self.sf_bool:
-            if sub: fid_pars['gsf_pars'] = sf_utils.get_subgaiasf_pars(theta=fid_pars['lat_min'], nskip=2, _nside=64, **gsf_kwargs)
-            else: fid_pars['gsf_pars'] = sf_utils.get_gaiasf_pars(theta=fid_pars['lat_min'], nskip=2, _nside=64)
-
+            print('Getting Selectionfunction pars')
+            if self.sub_sf: fid_pars['gsf_pars'] = sf_utils.get_subgaiasf_pars(theta=fid_pars['lat_min'], nskip=2, _nside=64, **gsf_kwargs)
+            else: fid_pars['gsf_pars'] = sf_utils.get_gaiasf_pars(theta=fid_pars['lat_min'], nskip=2, _nside=64, **gsf_kwargs)
+        print('Got Selectionfunction pars')
         self.fid_pars=fid_pars
 
     def _generate_kwargs(self, p0=None):
@@ -280,8 +283,9 @@ class mwfit():
             self.poisson_kwargs['sample'] = sample_2d
             self.poisson_kwargs['model_integrate'] = dh_msto.integral_model
         elif self.sf_bool:
-            self.poisson_kwargs['sample'] = sample_2d.T[self.sample['gaiasf_subset']].T
-            self.poisson_kwargs['model_integrate'] = dh_msto.integral_model_gaiaSF_grad
+            self.poisson_kwargs['sample'] = sample_2d.T[self.sample['sf_subset']].T
+            if not self.sub_sf: self.poisson_kwargs['model_integrate'] = dh_msto.integral_model_gaiaSF_grad
+            else: self.poisson_kwargs['model_integrate'] = dh_msto.integral_model_subgaiaSF_grad
 
         self._global()
 
@@ -326,7 +330,7 @@ class mwfit():
 
         # Identifiers of used sources
         self.output['source_id'] = self.sample['source_id']
-        try: self.output['gaiasf_subset'] = self.sample['gaiasf_subset']
+        try: self.output['sf_subset'] = self.sample['sf_subset']
         except KeyError: pass
         # Dictionary of parameters
         if true_pars is not None: self.output['true_pars'] = true_pars
@@ -375,7 +379,8 @@ class mwfit():
         for par in ['Mms','Mms1','Mms2']:
             self.fixed_pars[par] = self.fixed_pars[0][par]
 
-        self.optimize_results = data['optimize']
+        try: self.optimize_results = data['optimize']
+        except KeyError: pass
         self.mcmc_results = data['mcmc']
 
         self.sample={}
@@ -454,7 +459,7 @@ def maximize(p0, p0_idx=False, verbose=False, **kwargs):
     return res
 
 
-def poisson_like(params, bounds=None, grad=False):
+def poisson_like(params, bounds=None, grad=False, test=False):
 
     poisson_kwargs = copy(poisson_kwargs_global)
 
@@ -482,19 +487,24 @@ def poisson_like(params, bounds=None, grad=False):
         raise
 
     if not grad:
+        if test: return obj, integral, prior
         model_val = np.sum(obj) - integral + prior
-        if np.isnan(model_val): print('Nan lnp: ', params)
+        if np.isnan(model_val):
+            print('Nan lnp: ', params)
+            return -1e20
         return model_val
 
     elif grad:
+        if test: return np.sum(obj[0]), - integral[0], prior[0], np.sum(obj[1], axis=1), - integral[1], prior[1]
         model_val = np.sum(obj[0]) - integral[0] + prior[0]
         model_grad = np.sum(obj[1], axis=1) - integral[1] + prior[1]
-        print(integral)
         if np.isnan(model_val): print('Nan lnp: ', params)
         # if np.sum(np.abs(model_grad))>1e5:
         #     print(model_val)
         #     print(model_grad)
         #     print(params)
+        # return np.sum(obj[1], axis=1), -integral[1], prior[1]
+
         return model_val, model_grad
 
 global params_iteration
@@ -550,12 +560,15 @@ def poisson_like_parallel(params, bounds=None):
         print(params)
         raise
 
+    if not grad:
+        if np.isnan(model_val):
+            print('Nan lnp: ', params)
+            return -1e20
+        return logl_val - integral[0] + prior[0]
+
     global lnprob_iteration
     lnprob_iteration = logl_val - integral[0] + prior[0]
-
-    if not grad: return logl_val - integral[0] + prior[0]
     return logl_val - integral[0] + prior[0], logl_grad - integral[1] + prior[1]
-
 
 def int_idx(i):
     if i in np.arange(10).astype(str):
