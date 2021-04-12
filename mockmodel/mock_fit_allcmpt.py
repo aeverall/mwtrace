@@ -26,9 +26,9 @@ if __name__=='__main__':
     times = []; checkpoints = []
     times.append(time.time()); checkpoints.append('start')
 
-    run_id=12
+    run_id=13
     size = 100000
-    file = "sample_1m"
+    file = "sample_iso"
     # Load Sample
     sample = {}; true_pars={}; latent_pars={};
     filename="/data/asfe2/Projects/mwtrace_data/mockmodel/%s.h" % file
@@ -70,11 +70,9 @@ if __name__=='__main__':
     true_pars = true_pars
     sample = sample
 
-    message = f"""\n{run_id:03d} ---> Sample size: {size:d}, SF subset: {np.sum(sample['gaiasf_subset']):d}, SF ast subset: {np.sum(sample['astsf_subset']):d}
-                 DEBUG - running gradient descent only.
-                 fD and alpha3 free - 14 free parameters. hz_halo limited [4,7.3]. all alpha3 fixed. dirichlet alpha=2.
-                 perr gradient evaluation made numerically.
-                 ftol=1e-12, gtol=1e-7. When lnp=nan in mcmc - return 1e-20.
+    message = f"""\n{run_id:03d} ---> {file}, Sample size: {size:d}, SF subset: {np.sum(sample['gaiasf_subset']):d}, SF ast subset: {np.sum(sample['astsf_subset']):d}
+                 11 free parameters. hz_halo limited [3.5,7.3]. all alpha3 fixed. dirichlet alpha=2.
+                 perr gradient evaluation made numerically. ftol=1e-12, gtol=1e-7. When lnp=nan in mcmc - return 1e-20.
                  Parallax error from ASF.
                  w/ Astrometry Selection Function."""
     with open(f'/data/asfe2/Projects/mwtrace_data/mockmodel/messages.txt', 'a') as f:
@@ -97,15 +95,15 @@ if __name__=='__main__':
     param_trans[0] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
                       'fD': ('logit_scaled', 0,1, -10,10,'logistic'),
                       'alpha3':('nexp',0,0,-3,3,'none'),
-                      'hz': ('logit_scaled', 0.1,  1.2,-10,10,'logistic')}
+                      'hz': ('logit_scaled', 0.1,  0.6,-10,10,'logistic')}
     param_trans[1] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
                       'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
                       'alpha3':('nexp',0,0,-3,3,'none'),
-                      'hz': ('logit_scaled', 1.2,3,-10,10,'logistic')}
+                      'hz': ('logit_scaled', 0.6,3,-10,10,'logistic')}
     param_trans[2] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
                       'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
                       'alpha3':('nexp',0,0,-1,0,'none'),
-                      'hz': ('logit_scaled', 4,  7.3,-10,10,'logistic')}
+                      'hz': ('logit_scaled', 3.5,  7.3,-10,10,'logistic')}
 
     times.append(time.time()); checkpoints.append('initialised')
 
