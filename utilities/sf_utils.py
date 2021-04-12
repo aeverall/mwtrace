@@ -75,9 +75,9 @@ def get_gaiasf_pars(theta=np.pi/3, nskip=2, _nside=64, dr2_sf=None):
     uni_n_pixels, idx_n_pixels = np.unique(_n_pixels, return_inverse=True)
 
     # Bin in sinb and get unique sinb bins
-    _sinb_bins = np.linspace(np.sin(np.pi/3), 1, 11); _sinb_vals = (_sinb_bins[1:] + _sinb_bins[:-1])/2
-    _sinb_pixels = _sinb_vals[((np.sin(np.deg2rad(_b_pixels)) - np.sin(np.pi/3) )\
-                               /(1-np.sin(np.pi/3)) * 10).astype(int)]
+    _sinb_bins = np.linspace(np.sin(theta), 1, 11); _sinb_vals = (_sinb_bins[1:] + _sinb_bins[:-1])/2
+    _sinb_pixels = _sinb_vals[((np.sin(np.deg2rad(_b_pixels)) - np.sin(theta) )\
+                               /(1-np.sin(theta)) * 10).astype(int)]
     uni_sinb_pixels, idx_sinb_pixels = np.unique(_sinb_pixels, return_inverse=True)
 
     # Solution grid
@@ -154,9 +154,9 @@ def get_subgaiasf_pars(theta=np.pi/3, nskip=2, _nside=64, dr2_sf=None, sub_sf=No
     pixel_id = np.arange(hp.nside2npix(_nside))[pixweight>0]
 
     # Bin in sinb and get unique sinb bins
-    _sinb_bins = np.linspace(np.sin(np.pi/3), 1, 11); _sinb_vals = (_sinb_bins[1:] + _sinb_bins[:-1])/2
-    _sinb_pixels = _sinb_vals[((np.sin(np.deg2rad(_b_pixels)) - np.sin(np.pi/3) )\
-                               /(1-np.sin(np.pi/3)) * 10).astype(int)]
+    _sinb_bins = np.linspace(np.sin(theta), 1, 11); _sinb_vals = (_sinb_bins[1:] + _sinb_bins[:-1])/2
+    _sinb_pixels = _sinb_vals[((np.sin(np.deg2rad(_b_pixels)) - np.sin(theta) )\
+                               /(1-np.sin(theta)) * 10).astype(int)]
     uni_sinb_pixels, idx_sinb_pixels = np.unique(_sinb_pixels, return_inverse=True)
 
 
