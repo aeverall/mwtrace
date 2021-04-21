@@ -129,7 +129,7 @@ def layered_corners(samplers, labels=None, index=None, savefolder=None, savefile
         for j in range(chain.shape[2]):
             if functions[j] is not None:
                 truths_f[j] = functions[j](truths_f[j])
-    else: truths_f = truths.copy()
+    else: truths_f = None#truths.copy()
 
     for i in range(ndim):
         for j in range(ndim):
