@@ -663,6 +663,113 @@ def integral_model(params, bins=None, fid_pars=None, grad=False):
         jacobian = jacobian_params(params, fid_pars, ncomponents=fid_pars['ncomponents'])
         return N, integral_grad*jacobian
 
+def integral_model_cut(params, bins=None, fid_pars=None):
+
+    # Input Parameters
+    ncomponents=fid_pars['ncomponents']
+    transformed_params = combined_params(params, fid_pars, ncomponents=ncomponents)
+
+    integralcmpts = np.zeros(ncomponents)
+    if grad: integralcmpts_grad = np.zeros((ncomponents, 6))
+    weights = np.zeros(ncomponents)
+    integral_models = {'halo':integral_model_cut_halo,
+                       'disk':integral_model_cut_disk}
+
+    for j in range(ncomponents):
+        _integral_model = integral_models[fid_pars['components'][j]]
+        _uni_grid_integral = _integral_model(fid_pars['mmin'], fid_pars['mmax'], **transformed_params[j],
+                                    Mx=fid_pars['Mmax'], R0=fid_pars['R0'], bmin=fid_pars['lat_min'], grad=grad)
+        if grad: _uni_grid, _uni_grid_grad = _uni_grid_integral
+        else: _uni_grid = _uni_grid_integral
+
+        weights[j] = transformed_params[j]['w']
+
+    if not grad: return np.sum(weights * _uni_grid)
+
+def integral_model_cut_disk(mmin, mmax, hz=1., alpha1=-1., alpha2=-1., alpha3=-1., fD=0.5, Mto=4., Mms=8., Mms1=9., Mms2=7.,
+                                        Mx=10., R0=8.27, bmin=np.pi/3, grad=False):
+
+    betab = np.sin(bmin)/hz
+    beta1 = 1/hz
+
+    ep1=1.3; ep2=2.3;
+    a1=-ln10*(ep1-1)/(2.5*alpha1); a2=-ln10*(ep2-1)/(2.5*alpha2);
+    alphag = (np.log(a1/a2) - alpha1*(Mms-Mms1) + alpha2*(Mms-Mms2))/(Mms1-Mms2)
+    Ag = 1/a1 * np.exp((alpha1-alphag)*(Mms-Mms1))
+
+    # Normalisation
+    Ams_exponent = np.array([alpha1*(Mms-Mms1), alpha1*(Mms-Mx),
+                        alpha1*(Mms-Mms1)+alphag*(Mms1-Mms2), alpha1*(Mms-Mms1),
+                        alpha2*(Mms-Mto), alpha2*(Mms-Mms2)])
+    Ams_coeff = np.array([a2/alpha1, -a2/alpha1, a2/alphag, -a2/alphag, a1/alpha2, -a1/alpha2])
+    Ams = a1*a2/np.sum(Ams_coeff*np.exp(Ams_exponent))
+    AG = -alpha3
+
+    # Absolute magnitude not known
+    Mag_bounds = [-np.inf, Mto, Mms2, Mms1, Mx]
+    Mag_alpha =  np.array([alpha3, alpha2, alphag, alpha1])
+    Mag_t = 2 + 5*Mag_alpha/np.log(10)
+    Mag_norm =   [(1-fD) * AG     * np.exp(alpha3*Mto),
+                  fD     * Ams/a2 * np.exp(alpha2*Mms),
+                  fD     * Ams*Ag * np.exp(alphag*Mms),
+                  fD     * Ams/a1 * np.exp(alpha1*Mms)]
+
+    I = np.zeros(4)
+    for ii in range(4):
+        smax0 = np.array([10**((mmax -(Mag_bounds[ii]  +10))/5)])
+        smax1 = np.array([10**((mmax -(Mag_bounds[ii+1]  +10))/5)])
+        smin0 = np.array([10**((mmin -(Mag_bounds[ii]+10))/5)])
+        smin1 = np.array([10**((mmin -(Mag_bounds[ii+1]+10))/5)])
+
+        I[ii] = (np.exp(-Mag_alpha[ii]*Mag_bounds[ii+1]) * ( \
+                  + gamma_inc_rec_vecx(2, betab*smax1)/betab**2 \
+                  - gamma_inc_rec_vecx(2, beta1*smax1)/beta1**2 ) \
+             + np.exp(-Mag_alpha[ii]*(mmax-10)) * ( \
+                  - (gamma_incc_rec_vecx(Mag_t[ii],betab*smax0) - gamma_incc_rec_vecx(Mag_t[ii],betab*smax1))/betab**(Mag_t[ii]) \
+                  + (gamma_incc_rec_vecx(Mag_t[ii],beta1*smax0) - gamma_incc_rec_vecx(Mag_t[ii],beta1*smax1))/beta1**(Mag_t[ii]) ) \
+             + np.exp(-Mag_alpha[ii]*Mag_bounds[ii]) * ( \
+                  + gamma_incc_rec_vecx(2, betab*smax0)/betab**2 \
+                  - gamma_incc_rec_vecx(2, beta1*smax0)/beta1**2 ) \
+             - np.exp(-Mag_alpha[ii]*Mag_bounds[ii+1]) * ( \
+                  + gamma_inc_rec_vecx(2,betab*smin1)/betab**(2) \
+                  - gamma_inc_rec_vecx(2,beta1*smin1)/beta1**(2) ) \
+             - np.exp(-Mag_alpha[ii]*(mmin-10)) * ( \
+                  - (gamma_incc_rec_vecx(Mag_t[ii],betab*smin0) - gamma_incc_rec_vecx(Mag_t[ii],betab*smin1))/betab**Mag_t[ii] \
+                  + (gamma_incc_rec_vecx(Mag_t[ii],beta1*smin0) - gamma_incc_rec_vecx(Mag_t[ii],beta1*smin1))/beta1**Mag_t[ii] ) \
+             - np.exp(-Mag_alpha[ii]*Mag_bounds[ii]) * ( \
+                  + gamma_incc_rec_vecx(2, betab*smin0)/betab**2 \
+                  - gamma_incc_rec_vecx(2, beta1*smin0)/beta1**2 ) \
+                  )[0] * (-hz/Mag_alpha[ii])
+
+    return (np.tan(bmin)**2 / hz**3) * np.sum(I*Mag_norm)
+
+def integral_model_cut_halo(params, bins=None, fid_pars=None):
+
+    N = np.exp(params[0])
+    hz = 1/np.exp(params[1])
+    alpha = params[2]
+
+    Mmax = fid_pars['Mbol_max_true']
+    theta= fid_pars['lat_min']
+    mSF = fid_pars['m_sf']
+    s_bound = 10**((mSF -(Mmax+10))/5)
+
+    beta1 = np.sin(theta)/hz
+    beta2 = 1/hz
+
+    I = np.tan(theta)**2 / (hz**2) * ( \
+                scipy.special.gamma(2)*scipy.special.gammainc(2,beta1*s_bound)/beta1**2 \
+              - scipy.special.gamma(2)*scipy.special.gammainc(2,beta2*s_bound)/beta2**2 \
+        + s_bound**alpha * (
+                beta1**(alpha-2) * scipy.special.gamma(2-alpha)*\
+                                   scipy.special.gammaincc(2-alpha,beta1*s_bound) \
+              - beta2**(alpha-2) * scipy.special.gamma(2-alpha)*\
+                                   scipy.special.gammaincc(2-alpha,beta2*s_bound) ))
+
+    #print(I)
+
+    return N * I
+
 def integral_model_gaiaSF_grad(params, bins=None, fid_pars=None, gsftest=None, test=False, grad=False):
 
     # Input Parameters
@@ -1011,6 +1118,33 @@ def gaiasf_integrand_halo_grad(m, sinb, _selectionfunction,
 
     return _uni_grid, full_grad_I
 
+def appmag_model_subgaiaSF(params, fid_pars=None):
+
+    # Input Parameters
+    ncomponents=fid_pars['ncomponents']
+    transformed_params = combined_params(params, fid_pars, ncomponents=ncomponents)
+
+    gsf_pars = fid_pars['gsf_pars']
+
+    integralcmpts = np.zeros((ncomponents, len(gsf_pars['_m_grid'])))
+    weights = np.zeros(ncomponents)
+    integral_models = {'halo':subgaiasf_integrand_halo_grad,
+                       'disk':subgaiasf_integrand_disk_grad}
+    for j in range(ncomponents):
+        _integral_model = integral_models[fid_pars['components'][j]]
+        integrand = _integral_model(gsf_pars['_m_grid'], gsf_pars['uni_sinb_pixels'],
+                                    hz=transformed_params[j]['hz'],
+                                    alpha1=transformed_params[j]['alpha1'], alpha2=transformed_params[j]['alpha2'], alpha3=transformed_params[j]['alpha3'],
+                                    fD=transformed_params[j]['fD'], Mto=transformed_params[j]['Mto'], Mms=transformed_params[j]['Mms'],
+                                    Mx=fid_pars['Mmax'], R0=fid_pars['R0'], theta=fid_pars['lat_min'], grad=False)
+
+        # Summing over pixels is pretty fast!
+        integrand = integrand[gsf_pars['idx_sinb_pixels']]*gsf_pars['_selectionfunction']
+        integralcmpts[j] = np.sum( integrand.T*gsf_pars['pixel_area']/(4*np.pi), axis=1 )
+
+        weights[j] = transformed_params[j]['w']
+
+    return (weights*integralcmpts.T).T
 
 def integral_model_subgaiaSF_grad(params, bins=None, fid_pars=None, gsftest=None, test=False, grad=False):
 
@@ -1332,6 +1466,25 @@ def subgaiasf_integrand_halo_grad(m, sinb,
     if not grad: return integrand
     return integrand, grad_integrand
 
+
+@njit
+def gamma_inc_rec_vecx(a, x):
+    # Recurrence relation
+    # Evaluate upper incomplete Gamma function for a<0
+    # Initialise parameters
+    ans=np.zeros(len(x));
+    s=a;
+    norm=1.;
+    # Loop
+    while s<=0:
+        norm = norm/s
+        ans += norm * x**s * np.exp(-x)
+        s+=1;
+
+    # Final answer
+    ans += norm*numba_special.vec_gamma(s,s)*numba_special.vec_gammainc(s,x)
+
+    return ans
 
 @njit
 def gamma_incc_rec_vecx(a, x):
