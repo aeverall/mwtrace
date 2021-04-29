@@ -14,7 +14,8 @@ data={}
 # Download catalogue
 columns = ["b", "phot_g_mean_mag", "astrometric_params_solved", "nu_eff_used_in_astrometry", "pseudocolour", "bp_rp"]
 
-catalogue = "gaia_edr3.gaia_source"
+catalogue = "dr2xedr3"#"gaia_edr3.gaia_source"
+cat_label = "_dr3"
 b_min = 80
 file = f'/data/asfe2/Projects/mwtrace_data/gaia/{catalogue}_b{b_min}.h'
 
@@ -23,22 +24,22 @@ for cardinal in ["north", "south"]:
     with h5py.File(file, 'r') as hf:
         for col in columns: data[col] = hf[cardinal][col][...]
 
-    print('astrometric_params_solved: ', np.unique(data['astrometric_params_solved']))
+    print('astrometric_params_solved: ', np.unique(data['astrometric_params_solved'+cat_label]))
 
     # Parallax zero point
-    valid = (data['astrometric_params_solved']>3) & (~np.isnan(data['phot_g_mean_mag']))
+    valid = (data['astrometric_params_solved'+cat_label]>3) & (~np.isnan(data['phot_g_mean_mag'+cat_label]))
     zpvals = np.zeros(len(valid))
-    zpvals[valid] = zpt.get_zpt(data['phot_g_mean_mag'][valid],
-                                 data['nu_eff_used_in_astrometry'][valid],
-                                 data['pseudocolour'][valid],
-                                 data['b'][valid],
-                                 data['astrometric_params_solved'][valid])
+    zpvals[valid] = zpt.get_zpt(data['phot_g_mean_mag'+cat_label][valid],
+                                 data['nu_eff_used_in_astrometry'+cat_label][valid],
+                                 data['pseudocolour'+cat_label][valid],
+                                 data['b'+cat_label][valid],
+                                 data['astrometric_params_solved'+cat_label][valid])
 
     # G flux correction
-    valid = (~np.isnan(data['phot_g_mean_mag']))&(~np.isnan(data['bp_rp']))
+    valid = (~np.isnan(data['phot_g_mean_mag'+cat_label]))&(~np.isnan(data['bp_rp'+cat_label]))
     gmag_corr = np.zeros(len(valid))
-    gmag_corr[valid] = correct_gband(data['bp_rp'][valid], data['astrometric_params_solved'][valid], data['phot_g_mean_mag'][valid])
-    gmag_corr[~valid] = data['phot_g_mean_mag'][~valid]
+    gmag_corr[valid] = correct_gband(data['bp_rp'+cat_label][valid], data['astrometric_params_solved'+cat_label][valid], data['phot_g_mean_mag'+cat_label][valid])
+    gmag_corr[~valid] = data['phot_g_mean_mag'+cat_label][~valid]
 
     with h5py.File(file, 'a') as hf:
 
