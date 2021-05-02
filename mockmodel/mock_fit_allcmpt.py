@@ -26,7 +26,7 @@ if __name__=='__main__':
     times = []; checkpoints = []
     times.append(time.time()); checkpoints.append('start')
 
-    run_id=18
+    run_id=19
     size = 1000000
     file = "sample_iso"
     # Load Sample
@@ -65,14 +65,15 @@ if __name__=='__main__':
         config['data_dir'] = '/data/asfe2/Projects/astrometry/PyOutput/'
         M = 85; C = 1; jmax=4; lm=0.3; nside=32; ncores=80; B=2.0
         map_fname = f"chisquare_astrometry_jmax{jmax}_nside{nside}_M{M}_CGR{C}_lm{lm}_B{B:.1f}_ncores{ncores}_scipy_results.h5"
-        ast_sf = chisel(map_fname=map_fname, nside=nside, C=C, M=M,
+        ast_sf = chisel(map_fname=map_fname, nside=nside, C=C, M=M, lengthscale_m=lm, lengthscale_c=100.,
                         basis_options={'needlet':'chisquare', 'j':jmax, 'B':B, 'p':1.0, 'wavelet_tol':1e-2},
-                        spherical_basis_directory='/data/asfe2/Projects/astrometry/SphericalWaveletsApply/')
+                        spherical_basis_directory='/data/asfe2/Projects/astrometry/SphericalWavelets/')
         print("SF Mbins: ", ast_sf.Mbins)
         sample['astsf_subset'] = sf_utils.apply_subgaiasf(sample['l'], np.arcsin(sample['sinb']),
                                                           sample['m'], dr2_sf=dr3_sf, sub_sf=ast_sf, _nside=ast_sf.nside)[0]
-                                                          
+
         message = f"""\n{run_id:03d} ---> {file}, Sample size: {size:d}, SF subset: {np.sum(sample['gaiasf_subset']):d}, SF ast subset: {np.sum(sample['astsf_subset']):d}
+                     DEBUG Ast SF APPLICATION
                      11 free parameters. hz_halo limited [3.5,7.3]. all alpha3 fixed. dirichlet alpha=2.
                      perr gradient evaluation made numerically. ftol=1e-12, gtol=1e-7. When lnp=nan in mcmc - return 1e-20.
                      Selection Function: Gaia EDR3 Scanning Law Parent, Astrometry Selection Function nside32,jmax4 - grid method.
@@ -115,7 +116,7 @@ if __name__=='__main__':
     times.append(time.time()); checkpoints.append('initialised')
 
     nstep_all=5000
-    if True:
+    if False:
         save_file = f'/data/asfe2/Projects/mwtrace_data/mockmodel/mock_{file}_{size:d}_sf_perr_{run_id:03d}.h'
         if os.path.exists(save_file):
             raise ValueError('File %s already exists...')
@@ -168,7 +169,7 @@ if __name__=='__main__':
 
         times.append(time.time()); checkpoints.append('Astrometry SF selected')
 
-    if True:
+    if False:
         save_file = f'/data/asfe2/Projects/mwtrace_data/mockmodel/mock_{file}_{size:d}_full_{run_id:03d}.h'
         if os.path.exists(save_file):
             raise ValueError('File %s already exists...')
