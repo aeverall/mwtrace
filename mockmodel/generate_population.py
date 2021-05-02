@@ -64,24 +64,33 @@ if __name__=='__main__':
     for j in range(3):
         selected_samples[j]={}
 
-    nsample = 1000000
+    nsample = 5000000
     ncores=10
     nwalkers=30
     nstep=int(500 + nsample /nwalkers /ncores * 2 * 5)
     print('Nsample: ', nsample)
 
 
-    alpha1=-0.15; alpha2=-0.3
-    Mms=8.; Mms1=9.; Mms2=7.; Mx=10.7
-    R0=8.27; theta_deg=60
+    #alpha1=-0.15; alpha2=-0.3
+    #Mms=8.; Mms1=9.; Mms2=7.; Mx=10.7
+    #R0=8.27; theta_deg=60
+    # # Parameters for all three components of the model.
+    # global_params = {'alpha1':-0.15, 'alpha2':-0.3,
+    #                 'Mms':8., 'Mms1':9., 'Mms2':7., 'Mx':10.7,
+    #                 'R0':8.27, 'theta_deg':60, 'N':nsample}
+    # # Individual independent component parameters.
+    # params = {0: {'hz':0.9, 'alpha3':-1.,  'Mto':4.8, 'fD':0.94, 'w':0.2},
+    #           1: {'hz':1.9, 'alpha3':-0.5, 'Mto':3.14, 'fD':0.998, 'w':0.3},
+    #           2: {'hz':4.6, 'alpha3':-0.6,  'Mto':3.3, 'fD':0.995,  'w':0.5}}
+
     # Parameters for all three components of the model.
-    global_params = {'alpha1':-0.15, 'alpha2':-0.3,
-                    'Mms':8., 'Mms1':9., 'Mms2':7., 'Mx':10.7,
-                    'R0':8.27, 'theta_deg':60, 'N':nsample}
+    global_params = {'alpha1':-0.12, 'alpha2':-0.26,
+                    'Mms':8., 'Mms1':9., 'Mms2':7., 'Mx':12,
+                    'R0':8.27, 'theta_deg':80, 'N':nsample}
     # Individual independent component parameters.
-    params = {0: {'hz':0.9, 'alpha3':-1.,  'Mto':4.8, 'fD':0.94, 'w':0.2},
-              1: {'hz':1.9, 'alpha3':-0.5, 'Mto':3.14, 'fD':0.998, 'w':0.3},
-              2: {'hz':4.6, 'alpha3':-0.6,  'Mto':3.3, 'fD':0.995,  'w':0.5}}
+    params = {0: {'hz':0.3, 'alpha3':-0.6,  'Mto':3.1, 'fD':0.996, 'w':0.012},
+              1: {'hz':0.9, 'alpha3':-0.73, 'Mto':3.1, 'fD':0.998, 'w':0.044},
+              2: {'hz':3.74,'alpha3':-0.62, 'Mto':3.1, 'fD':0.995, 'w':0.944}}
     print(params)
 
     weights = np.array([params[j]['w'] for j in range(3)])
@@ -230,7 +239,7 @@ if __name__=='__main__':
     selected_samples['parallax_obs'] = np.random.normal(1/selected_samples['s'], selected_samples['parallax_error'])
 
     #%% Save data in HDF5 format
-    filename = '/data/asfe2/Projects/mwtrace_data/mockmodel/sample_1m_test.h'
+    filename = '/data/asfe2/Projects/mwtrace_data/mockmodel/sample_iso_test.h'
     print('Saving...' + filename)
     with h5py.File(filename, 'w') as hf:
             for k in global_params.keys():
