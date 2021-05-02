@@ -43,11 +43,11 @@ if __name__=='__main__':
   #
   #   columns += [col+'_edr3' for col in columns_edr3]
 
-    run_id=2
+    run_id=3
     size = 100000
     file = "gaia"
     file = "gaia_edr3.gaia_source_b80"
-    cardinal = "south"
+    cardinal = "north"
     # Load Sample
     #keys = {'phot_g_mean_mag':'phot_g_mean_mag', 'parallax':'parallax', 'b':'b', 'parallax_error':'parallax_error', }
     keys = ['source_id', 'phot_g_corr', 'parallax', 'b', 'parallax_error', 'zeropoint']
@@ -65,31 +65,33 @@ if __name__=='__main__':
     print(sample.keys())
 
     sample['M'] = sample['m'] + 5*(np.log10(sample['parallax_obs'])-2)
-    subset = (sample['M']<12)
-    print('MG<12 cut: %d/%d' % (np.sum(subset), len(subset)))
+    subset = (sample['M']<12)&(sample['m']>5)&(sample['m']<22)
+    print('MG<12 cut: %d/%d' % (np.sum(sample['M']<12), len(subset)))
+    print('G<22 cut: %d/%d' % (np.sum(sample['m']<22), len(subset)))
+    print('G>5 cut: %d/%d' % (np.sum(sample['m']>5), len(subset)))
     for key in sample.keys():
         sample[key] = sample[key][subset]
 
 
-    # Apply Gaia Selection Function
+    # Get Gaia Selection Function
     from selectionfunctions.carpentry import chisel
     import selectionfunctions.cog_ii as CoGii
     from selectionfunctions.config import config
     config['data_dir'] = '/data/asfe2/Projects/testselectionfunctions/'
     #CoGii.fetch()
-    dr2_sf = CoGii.dr2_sf(version='modelAB',crowding=False)
+    dr3_sf = CoGii.dr3_sf(version='modelAB',crowding=False)
 
-    config['data_dir'] = '/data/asfe2/Projects/astrometry/StanOutput/'
-    # M = 85; C = 1; j=[-1,0,1,2,3,4]; lengthscale=0.3; nside=32
-    # map_fname = f"chisquare_j{str(j).replace(' ','')}_nside{nside}_M{M}_C1_l0.3_results.h5"
-    M = 214; C = 1; jmax=4; lengthscale=0.3; nside=32
-    map_fname = f"chisquare_jmax{jmax}_nside{nside}_M{M}_C1_l0.3_results.h5"
-    ast_sf = chisel(map_fname=map_fname, nside=64, C=C, M=M, basis_options={'needlet':'chisquare', 'j':j, 'B':2.0, 'p':1.0, 'wavelet_tol':1e-2},
-                           spherical_basis_directory='/data/asfe2/Projects/astrometry/SphericalWavelets/')
+    config['data_dir'] = '/data/asfe2/Projects/astrometry/PyOutput/'
+    M = 85; C = 1; jmax=4; lm=0.3; nside=32; ncores=80; B=2.0
+    map_fname = f"chisquare_astrometry_jmax{jmax}_nside{nside}_M{M}_CGR{C}_lm{lm}_B{B:.1f}_ncores{ncores}_scipy_results.h5"
+    ast_sf = chisel(map_fname=map_fname, nside=nside, C=C, M=M,
+                    basis_options={'needlet':'chisquare', 'j':jmax, 'B':B, 'p':1.0, 'wavelet_tol':1e-2},
+                    spherical_basis_directory='/data/asfe2/Projects/astrometry/SphericalWaveletsApply/')
 
-    message = f"""\n{run_id:03d} ---> {file}, {cardinal}, MG<12, Sample size: {size:d}
+    message = f"""\n{run_id:03d} ---> {file}, {cardinal}, MG<12, 5<G<12, Sample size: {size:d}
                  11 free parameters. hz_halo limited [3.5,7.3]. all alpha3 fixed. dirichlet alpha=2.
                  perr gradient evaluation made numerically. ftol=1e-12, gtol=1e-7. When lnp=nan in mcmc - return 1e-20.
+                 Gaia SF: EDR3 (from Scanning Law)
                  Astrometry SF: {map_fname}."""
     with open(f'/data/asfe2/Projects/mwtrace_data/gaia/messages.txt', 'a') as f:
         f.write(message)
@@ -139,14 +141,14 @@ if __name__=='__main__':
 
         model_sf_err = mwfit(free_pars=free_pars, fixed_pars=fixed_pars, sample=sample, sf_bool=True, perr_bool=True, sub_sf=True, param_trans=param_trans)
         model_sf_err.sample['sf_subset'] = np.ones(len(sample['m'])).astype(bool)
-        model_sf_err._generate_fid_pars(dr2_sf=dr2_sf, sub_sf=ast_sf, _m_grid=np.arange(0., 22.1, 0.1))
+        model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside)
         model_sf_err._generate_kwargs()
         print('bounds:\n', model_sf_err.poisson_kwargs['param_bounds'])
 
         # Sample from prior
         model_sf_err.mcmc_prior()
         # Optimize with BFGS
-        model_sf_err.optimize_chunk(niter=5, ncores=40, label='sf_perr_bfgs', method='L-BFGS-B', verbose=True, minimize_options={'disp':False, 'ftol':1e-12, 'gtol':1e-7})
+        model_sf_err.optimize_chunk(niter=10, ncores=40, label='sf_perr_bfgs', method='L-BFGS-B', verbose=True, minimize_options={'disp':False, 'ftol':1e-12, 'gtol':1e-7})
         # Run MCMC
         model_sf_err.mcmc(ncores=40, nsteps=nstep_all, label='sf_perr_mcmc', optimize_label='sf_perr_bfgs')
         # Save results

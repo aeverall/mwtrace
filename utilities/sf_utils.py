@@ -17,7 +17,7 @@ from selectionfunctions.carpentry import chisel
 from selectionfunctions.source import Source
 
 
-def apply_subgaiasf(l_sample, b_sample, G_sample, get_prob=True, dr2_sf=None, sub_sf=None, _nside=64):
+def apply_subgaiasf(l_sample, b_sample, G_sample, get_prob=True, dr2_sf=None, sub_sf=None, _nside=32):
 
     if dr2_sf is None: dr2_sf = CoGii.dr2_sf(version='modelAB', crowding=False)
 
@@ -39,7 +39,7 @@ def apply_subgaiasf(l_sample, b_sample, G_sample, get_prob=True, dr2_sf=None, su
 
     # Sub sf prob
     if sub_sf is not None:
-        sf_prob *= sub_sf(c)
+        sf_prob *= sub_sf(c, grid=True)
 
     subset = sf_prob>np.random.rand(len(_n_sample))
 
@@ -59,7 +59,7 @@ def apply_subgaiasf(l_sample, b_sample, G_sample, get_prob=True, dr2_sf=None, su
     # if get_prob: return subset, sf_prob
     # return subset
 
-def get_subgaiasf_pars(theta=np.pi/3, nskip=2, _nside=64, dr2_sf=None, sub_sf=None, _m_grid=np.arange(0.,25.01,0.1)):
+def get_subgaiasf_pars(theta=np.pi/3, _nside=32, dr2_sf=None, sub_sf=None, _m_grid=np.arange(0.,25.01,0.1)):
 
     # Get healpix coordinates
     hp_ra, hp_dec = hp.pix2ang(_nside, np.arange(hp.nside2npix(_nside)), nest=True, lonlat=True)
@@ -104,7 +104,7 @@ def get_subgaiasf_pars(theta=np.pi/3, nskip=2, _nside=64, dr2_sf=None, sub_sf=No
     _sfprob = gaia_sf(_alpha, _beta, _n, _m)
     print('Ast SF:', gg.shape)
     # Sub SF prob
-    if sub_sf is not None: _sfprob *= sub_sf(coords)
+    if sub_sf is not None: _sfprob *= sub_sf(coords, grid=True)
 
 
     gsf_pars={'uni_sinb_pixels':uni_sinb_pixels, 'idx_sinb_pixels':idx_sinb_pixels,
@@ -112,7 +112,6 @@ def get_subgaiasf_pars(theta=np.pi/3, nskip=2, _nside=64, dr2_sf=None, sub_sf=No
               '_selectionfunction':_sfprob, '_m_grid':_m_grid}
 
     return gsf_pars
-
 
 def apply_gaiasf(l_sample, b_sample, G_sample, get_prob=True, dr2_sf=None, _nside=64):
 

@@ -26,7 +26,7 @@ if __name__=='__main__':
     times = []; checkpoints = []
     times.append(time.time()); checkpoints.append('start')
 
-    run_id=17
+    run_id=18
     size = 1000000
     file = "sample_iso"
     # Load Sample
@@ -65,15 +65,17 @@ if __name__=='__main__':
         config['data_dir'] = '/data/asfe2/Projects/astrometry/PyOutput/'
         M = 85; C = 1; jmax=4; lm=0.3; nside=32; ncores=80; B=2.0
         map_fname = f"chisquare_astrometry_jmax{jmax}_nside{nside}_M{M}_CGR{C}_lm{lm}_B{B:.1f}_ncores{ncores}_scipy_results.h5"
-        ast_sf = chisel(map_fname=map_fname, nside=64, C=C, M=M,
+        ast_sf = chisel(map_fname=map_fname, nside=nside, C=C, M=M,
                         basis_options={'needlet':'chisquare', 'j':jmax, 'B':B, 'p':1.0, 'wavelet_tol':1e-2},
                         spherical_basis_directory='/data/asfe2/Projects/astrometry/SphericalWaveletsApply/')
+        print("SF Mbins: ", ast_sf.Mbins)
         sample['astsf_subset'] = sf_utils.apply_subgaiasf(sample['l'], np.arcsin(sample['sinb']),
-                                                          sample['m'], dr2_sf=dr3_sf, sub_sf=ast_sf)[0]
+                                                          sample['m'], dr2_sf=dr3_sf, sub_sf=ast_sf, _nside=ast_sf.nside)[0]
+                                                          
         message = f"""\n{run_id:03d} ---> {file}, Sample size: {size:d}, SF subset: {np.sum(sample['gaiasf_subset']):d}, SF ast subset: {np.sum(sample['astsf_subset']):d}
                      11 free parameters. hz_halo limited [3.5,7.3]. all alpha3 fixed. dirichlet alpha=2.
                      perr gradient evaluation made numerically. ftol=1e-12, gtol=1e-7. When lnp=nan in mcmc - return 1e-20.
-                     Selection Function: Gaia EDR3 Scanning Law Parent, Astrometry Selection Function (not finished optimizing yet).
+                     Selection Function: Gaia EDR3 Scanning Law Parent, Astrometry Selection Function nside32,jmax4 - grid method.
                      Parallax error: From ASF."""
 
     true_pars = true_pars
@@ -121,7 +123,7 @@ if __name__=='__main__':
         model_sf_err = mwfit(free_pars=free_pars, fixed_pars=true_pars, sample=sample, sf_bool=True, perr_bool=True, sub_sf=True, param_trans=param_trans)
         model_sf_err.sample['sf_subset'] = sample['astsf_subset'].copy()
         #model_sf_err.sample['sf_subset'] = sample['gaiasf_subset'].copy()
-        model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=np.arange(0., 22.1, 0.1))
+        model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside)
         model_sf_err._generate_kwargs()
         print('bounds:\n', model_sf_err.poisson_kwargs['param_bounds'])
 
@@ -132,9 +134,9 @@ if __name__=='__main__':
         print("True likelihood: ", model_sf_err.evaluate_likelihood(true_params_f))
         print(true_params_f, end="\n")
         # Optimize with BFGS
-        model_sf_err.optimize_chunk(niter=10, ncores=40, label='sf_perr_bfgs', method='L-BFGS-B', verbose=True, minimize_options={'disp':False, 'ftol':1e-12, 'gtol':1e-7})
+        model_sf_err.optimize_chunk(niter=10, ncores=80, label='sf_perr_bfgs', method='L-BFGS-B', verbose=True, minimize_options={'disp':False, 'ftol':1e-12, 'gtol':1e-7})
         # Run MCMC
-        model_sf_err.mcmc(ncores=40, nsteps=nstep_all, label='sf_perr_mcmc', optimize_label='sf_perr_bfgs')
+        model_sf_err.mcmc(ncores=80, nsteps=nstep_all, label='sf_perr_mcmc', optimize_label='sf_perr_bfgs')
         # Save results
         model_sf_err.save(save_file, true_pars, mode='w')
 
@@ -147,7 +149,7 @@ if __name__=='__main__':
 
         model_sf = mwfit(free_pars=free_pars, fixed_pars=true_pars, sample=sample, sf_bool=True, perr_bool=False, sub_sf=True, param_trans=param_trans)
         model_sf.sample['sf_subset'] = sample['astsf_subset'].copy()
-        model_sf._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=np.arange(0., 22.1, 0.1))
+        model_sf._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside)
         model_sf._generate_kwargs()
         print('bounds:\n', model_sf.poisson_kwargs['param_bounds'])
 
@@ -197,7 +199,7 @@ if __name__=='__main__':
 
         model_sf_err = mwfit(free_pars=free_pars, fixed_pars=true_pars, sample=sample, sf_bool=True, perr_bool=True, sub_sf=True, param_trans=param_trans)
         model_sf_err.sample['sf_subset'] = sample['astsf_subset'].copy()
-        model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=np.arange(0., 22.1, 0.1))
+        model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside)
         model_sf_err._generate_kwargs()
         print('bounds:\n', model_sf_err.poisson_kwargs['param_bounds'])
         # Check true parameters
