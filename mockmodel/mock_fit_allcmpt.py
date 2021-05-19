@@ -26,7 +26,7 @@ if __name__=='__main__':
     times = []; checkpoints = []
     times.append(time.time()); checkpoints.append('start')
 
-    run_id=19
+    run_id=21
     size = 1000000
     file = "sample_iso"
     # Load Sample
@@ -63,7 +63,7 @@ if __name__=='__main__':
         sample['gaiasf_subset'] = sf_utils.apply_subgaiasf(sample['l'], np.arcsin(sample['sinb']), sample['m'], dr2_sf=dr3_sf)[0]
 
         config['data_dir'] = '/data/asfe2/Projects/astrometry/PyOutput/'
-        M = 85; C = 1; jmax=4; lm=0.3; nside=32; ncores=80; B=2.0
+        M = 85; C = 1; jmax=5; lm=0.3; nside=64; ncores=88; B=2.0
         map_fname = f"chisquare_astrometry_jmax{jmax}_nside{nside}_M{M}_CGR{C}_lm{lm}_B{B:.1f}_ncores{ncores}_scipy_results.h5"
         ast_sf = chisel(map_fname=map_fname, nside=nside, C=C, M=M, lengthscale_m=lm, lengthscale_c=100.,
                         basis_options={'needlet':'chisquare', 'j':jmax, 'B':B, 'p':1.0, 'wavelet_tol':1e-2},
@@ -73,10 +73,9 @@ if __name__=='__main__':
                                                           sample['m'], dr2_sf=dr3_sf, sub_sf=ast_sf, _nside=ast_sf.nside)[0]
 
         message = f"""\n{run_id:03d} ---> {file}, Sample size: {size:d}, SF subset: {np.sum(sample['gaiasf_subset']):d}, SF ast subset: {np.sum(sample['astsf_subset']):d}
-                     DEBUG Ast SF APPLICATION
-                     11 free parameters. hz_halo limited [3.5,7.3]. all alpha3 fixed. dirichlet alpha=2.
+                     11 free parameters. hz_halo limited [3.,7.3]. logw [0,30]. all alpha3 fixed. dirichlet alpha=2.
                      perr gradient evaluation made numerically. ftol=1e-12, gtol=1e-7. When lnp=nan in mcmc - return 1e-20.
-                     Selection Function: Gaia EDR3 Scanning Law Parent, Astrometry Selection Function nside32,jmax4 - grid method.
+                     Selection Function: Gaia EDR3 Scanning Law Parent, Astrometry Selection Function nside64,jmax5 - grid method.
                      Parallax error: From ASF."""
 
     true_pars = true_pars
@@ -100,23 +99,23 @@ if __name__=='__main__':
     a_dirichlet = 2
     param_trans['shd'] = {'alpha1':('nexp',0,0,-5,3,'none'),
                           'alpha2':('nexp',0,0,-5,3,'none')}
-    param_trans[0] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
+    param_trans[0] = {'w':('exp',0,0,0,30,'dirichlet',a_dirichlet),
                       'fD': ('logit_scaled', 0,1, -10,10,'logistic'),
                       'alpha3':('nexp',0,0,-3,3,'none'),
                       'hz': ('logit_scaled', 0.1,  0.6,-10,10,'logistic')}
-    param_trans[1] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
+    param_trans[1] = {'w':('exp',0,0,0,30,'dirichlet',a_dirichlet),
                       'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
                       'alpha3':('nexp',0,0,-3,3,'none'),
                       'hz': ('logit_scaled', 0.6,3,-10,10,'logistic')}
-    param_trans[2] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
+    param_trans[2] = {'w':('exp',0,0,0,30,'dirichlet',a_dirichlet),
                       'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
                       'alpha3':('nexp',0,0,-1,0,'none'),
-                      'hz': ('logit_scaled', 3.5,  7.3,-10,10,'logistic')}
+                      'hz': ('logit_scaled', 3.,  7.3,-10,10,'logistic')}
 
     times.append(time.time()); checkpoints.append('initialised')
 
     nstep_all=5000
-    if False:
+    if True:
         save_file = f'/data/asfe2/Projects/mwtrace_data/mockmodel/mock_{file}_{size:d}_sf_perr_{run_id:03d}.h'
         if os.path.exists(save_file):
             raise ValueError('File %s already exists...')
@@ -135,9 +134,9 @@ if __name__=='__main__':
         print("True likelihood: ", model_sf_err.evaluate_likelihood(true_params_f))
         print(true_params_f, end="\n")
         # Optimize with BFGS
-        model_sf_err.optimize_chunk(niter=10, ncores=80, label='sf_perr_bfgs', method='L-BFGS-B', verbose=True, minimize_options={'disp':False, 'ftol':1e-12, 'gtol':1e-7})
+        model_sf_err.optimize_chunk(niter=10, ncores=40, label='sf_perr_bfgs', method='L-BFGS-B', verbose=True, minimize_options={'disp':False, 'ftol':1e-12, 'gtol':1e-7})
         # Run MCMC
-        model_sf_err.mcmc(ncores=80, nsteps=nstep_all, label='sf_perr_mcmc', optimize_label='sf_perr_bfgs')
+        model_sf_err.mcmc(ncores=40, nsteps=nstep_all, label='sf_perr_mcmc', optimize_label='sf_perr_bfgs')
         # Save results
         model_sf_err.save(save_file, true_pars, mode='w')
 
@@ -163,13 +162,13 @@ if __name__=='__main__':
         # Optimize with BFGS
         model_sf.optimize_parallel(niter=10, ncores=10, label='sf_bfgs', method='L-BFGS-B', verbose=True, minimize_options={'disp':False})
         # Run MCMC
-        model_sf.mcmc(ncores=20, nsteps=nstep_all, label='sf_mcmc', optimize_label='sf_bfgs')
+        model_sf.mcmc(ncores=40, nsteps=nstep_all, label='sf_mcmc', optimize_label='sf_bfgs')
         # Save results
         model_sf.save(save_file, true_pars, mode='w')
 
         times.append(time.time()); checkpoints.append('Astrometry SF selected')
 
-    if False:
+    if True:
         save_file = f'/data/asfe2/Projects/mwtrace_data/mockmodel/mock_{file}_{size:d}_full_{run_id:03d}.h'
         if os.path.exists(save_file):
             raise ValueError('File %s already exists...')

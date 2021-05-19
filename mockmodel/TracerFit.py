@@ -184,6 +184,27 @@ class mwfit():
         self.mcmc_results['chain'][label] = sampler.chain
         self.mcmc_results['lnprob'][label] = sampler.lnprobability
 
+    def mcmc_progress(self, p0=None, ncores=1, nsteps=1000, progress=0, savefile=None, backend=None, label='_', optimize_label='_', **model_kwargs):
+
+        if progress==0:
+            if p0 is None: p0 = self.optimize_results['x'][optimize_label][np.argmax(self.optimize_results['lnp'][optimize_label])]
+            initialise=True
+            ndim = p0.shape[0]
+            print('p0 = ', p0)
+        else:
+            p0 = None
+            ndim = backend.get_chain().shape[2]
+            initialise=False
+
+        self._generate_kwargs(p0=p0, **model_kwargs)
+
+        print(f'mcmc ncores {ncores}')
+        sampler = samplers.run_mcmc_progress(p0, poisson_like, self.poisson_kwargs['param_bounds'], nstep=int(nsteps-progress),
+                                                ndim=ndim, ncores=ncores, backend=backend, initialise=initialise)
+
+        self.mcmc_results['chain'][label] = sampler.chain
+        self.mcmc_results['lnprob'][label] = sampler.lnprobability
+
     def mcmc_prior(self):
 
         self._global()
@@ -320,8 +341,6 @@ class mwfit():
     def save_hdf5(self, chain_dict, filename, mode='w'):
         # Save all chains
         print('Saving...' + filename)
-        if os.path.exists(filename) and mode=='w':
-            raise ValueError('File %s already exists...')
         print('Mode: %s' % mode)
 
         with h5py.File(filename, mode) as hf:
@@ -384,10 +403,12 @@ class mwfit():
 
         try: self.optimize_results = data['optimize']
         except KeyError: pass
-        self.mcmc_results = data['mcmc']
+        try: self.mcmc_results = data['mcmc']
+        except KeyError: pass
 
-        self.sample={}
-        self.sample['source_id'] = data['source_id']
+        if self.sample is None:
+            self.sample={}
+            self.sample['source_id'] = data['source_id']
 
 
     def get_true_params(self, true_pars):

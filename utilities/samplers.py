@@ -82,7 +82,35 @@ def run_mcmc_global(p0, poisson_like, bounds, nstep=1000, ncores=1, tqdm_foo=tqd
 
     return sampler
 
+def run_mcmc_progress(p0, poisson_like, bounds, nstep=1000, ndim=1, ncores=1, initialise=True, backend=None):
+    """
+    run_mcmc_global: emcee with poisson_kwargs defined globally.
+    Data is not passed back and forth but is always called as a global argument.
+    Leads to large performance increase for big datasets
+    """
 
+    nwalkers=ndim*4;
+
+    if initialise:
+        backend.reset(nwalkers, ndim)
+        i_init=0;
+        p0_bound=np.ones(nwalkers, dtype=bool)
+        p0_walkers = np.zeros((nwalkers,ndim))
+        while np.sum(p0_bound)>0:
+            p0_walkers[p0_bound] = np.random.normal(p0, np.abs(bounds[1]-bounds[0]).astype(float)/100000, size=(np.sum(p0_bound),ndim))
+            p0_bound = (np.sum((p0_walkers<=bounds[0])|(p0_walkers>=bounds[1]), axis=1)>0).astype(bool)
+            if i_init%10==0: print('Bad parameter initialisation: i=%d, nbad=%d' % (i_init, np.sum(p0_bound)))
+            i_init+=1
+    else:
+        if not p0 is None: p0_walkers = p0.copy().T
+        else: p0_walkers=None
+
+    print(f'run_mcmc ncores {ncores}')
+    with Pool(ncores) as pool:
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, poisson_like, pool=pool, backend=backend)
+        sampler.run_mcmc(p0_walkers, nstep, progress=True)
+
+    return sampler
 
 
 def sample_mcmc1d(sample_like, param_dict, nsample=1000, logmodel=True, show_progress=True):
