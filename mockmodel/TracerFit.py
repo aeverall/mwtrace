@@ -277,7 +277,7 @@ class mwfit():
         # Gaia selection function applied
         if self.sf_bool:
             print('Getting Selectionfunction pars')
-            if self.sub_sf: fid_pars['gsf_pars'] = sf_utils.get_subgaiasf_pars(theta=fid_pars['lat_min'],**gsf_kwargs)
+            if self.sub_sf: fid_pars['gsf_pars'] = sf_utils.masked_gaiasf_pars(theta=fid_pars['lat_min'],**gsf_kwargs)
             else: fid_pars['gsf_pars'] = sf_utils.get_gaiasf_pars(theta=fid_pars['lat_min'], nskip=2, _nside=64, **gsf_kwargs)
         print('Got Selectionfunction pars')
         self.fid_pars=fid_pars

@@ -75,7 +75,7 @@ if __name__=='__main__':
 
     message_file = f'/data/asfe2/Projects/mwtrace_data/mockmodel/messages_sys.txt'
 
-    run_id=2
+    run_id=3
     size = 1000000
     file = "sample_iso"
     filename="/data/asfe2/Projects/mwtrace_data/mockmodel/%s.h" % file
@@ -113,7 +113,7 @@ if __name__=='__main__':
     sample['astsf_subset'] = sf_subset
 
     message = f"""\n{run_id:03d} ---> Mock Systematics: {file}, Sample size: {size:d}, SF ast subset: {np.sum(sample['astsf_subset']):d}
-                 11 free parameters. hz_halo limited [3.5,7.3]. all alpha3 fixed. dirichlet alpha=2.
+                 11 free parameters. hz_halo limited [3,7.3]. all alpha3 fixed. dirichlet alpha=2.
                  perr gradient evaluation made numerically. ftol=1e-12, gtol=1e-7. When lnp=nan in mcmc - return 1e-20.
                  Selection Function: Gaia EDR3 Scanning Law Parent, Astrometry Selection Function (not finished optimizing yet).
                  Parallax error: From ASF.
@@ -138,18 +138,18 @@ if __name__=='__main__':
     a_dirichlet = 2
     param_trans['shd'] = {'alpha1':('nexp',0,0,-5,3,'none'),
                           'alpha2':('nexp',0,0,-5,3,'none')}
-    param_trans[0] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
+    param_trans[0] = {'w':('exp',0,0,0,30,'dirichlet',a_dirichlet),
                       'fD': ('logit_scaled', 0,1, -10,10,'logistic'),
                       'alpha3':('nexp',0,0,-3,3,'none'),
                       'hz': ('logit_scaled', 0.1,  0.6,-10,10,'logistic')}
-    param_trans[1] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
+    param_trans[1] = {'w':('exp',0,0,0,30,'dirichlet',a_dirichlet),
                       'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
                       'alpha3':('nexp',0,0,-3,3,'none'),
                       'hz': ('logit_scaled', 0.6,3,-10,10,'logistic')}
-    param_trans[2] = {'w':('exp',0,0,-10,20,'dirichlet',a_dirichlet),
+    param_trans[2] = {'w':('exp',0,0,0,30,'dirichlet',a_dirichlet),
                       'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
                       'alpha3':('nexp',0,0,-1,0,'none'),
-                      'hz': ('logit_scaled', 3.5,  7.3,-10,10,'logistic')}
+                      'hz': ('logit_scaled', 3.,  7.3,-10,10,'logistic')}
 
     times.append(time.time()); checkpoints.append('initialised')
 

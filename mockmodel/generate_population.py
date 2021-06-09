@@ -231,15 +231,15 @@ if __name__=='__main__':
     import scanninglaw.asf as asf
     from scanninglaw.source import Source
     from scanninglaw.config import config
-    asf.fetch()
     config['data_dir'] = '/data/asfe2/Projects/testscanninglaw/'
-    dr2_asf = asf.asf(version='cogiv_2020')
+    asf.fetch('dr3_nominal')
+    dr3_asf = asf.asf(version='dr3_nominal')
     c=Source(l=selected_samples['l'], b=np.arcsin(selected_samples['sinb']), unit='rad', frame='galactic', photometry={'gaia_g':selected_samples['m']})
-    selected_samples['parallax_error'] = np.sqrt(dr2_asf(c)[2,2])
+    selected_samples['parallax_error'] = np.sqrt(dr3_asf(c)[2,2])
     selected_samples['parallax_obs'] = np.random.normal(1/selected_samples['s'], selected_samples['parallax_error'])
 
     #%% Save data in HDF5 format
-    filename = '/data/asfe2/Projects/mwtrace_data/mockmodel/sample_iso_test.h'
+    filename = '/data/asfe2/Projects/mwtrace_data/mockmodel/sample_dr3asf.h'
     print('Saving...' + filename)
     with h5py.File(filename, 'w') as hf:
             for k in global_params.keys():

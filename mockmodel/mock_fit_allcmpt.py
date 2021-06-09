@@ -26,9 +26,9 @@ if __name__=='__main__':
     times = []; checkpoints = []
     times.append(time.time()); checkpoints.append('start')
 
-    run_id=21
+    run_id=23
     size = 1000000
-    file = "sample_iso"
+    file = "sample_dr3asf"
     # Load Sample
     sample = {}; true_pars={}; latent_pars={};
     magcuts = [-100,200]
@@ -71,16 +71,21 @@ if __name__=='__main__':
         print("SF Mbins: ", ast_sf.Mbins)
         sample['astsf_subset'] = sf_utils.apply_subgaiasf(sample['l'], np.arcsin(sample['sinb']),
                                                           sample['m'], dr2_sf=dr3_sf, sub_sf=ast_sf, _nside=ast_sf.nside)[0]
+        # Set to zero as no astrometry error model beyond G=21.45
+        sample['astsf_subset'][sample['m']>21.45] == 0.
 
         message = f"""\n{run_id:03d} ---> {file}, Sample size: {size:d}, SF subset: {np.sum(sample['gaiasf_subset']):d}, SF ast subset: {np.sum(sample['astsf_subset']):d}
                      11 free parameters. hz_halo limited [3.,7.3]. logw [0,30]. all alpha3 fixed. dirichlet alpha=2.
                      perr gradient evaluation made numerically. ftol=1e-12, gtol=1e-7. When lnp=nan in mcmc - return 1e-20.
                      Selection Function: Gaia EDR3 Scanning Law Parent, Astrometry Selection Function nside64,jmax5 - grid method.
-                     Parallax error: From ASF."""
+                     Parallax error: From ASF.
+                     Testing mask code."""
 
     true_pars = true_pars
     sample = sample
 
+    print("Nan parallax error: ", np.sum(np.isnan(sample['parallax_error'])))
+    print("Nan perr in subset: ", np.sum(sample['astsf_subset']&np.isnan(sample['parallax_error'])))
 
     with open(f'/data/asfe2/Projects/mwtrace_data/mockmodel/messages.txt', 'a') as f:
         f.write(message)

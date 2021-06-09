@@ -113,6 +113,72 @@ def get_subgaiasf_pars(theta=np.pi/3, _nside=32, dr2_sf=None, sub_sf=None, _m_gr
 
     return gsf_pars
 
+def masked_gaiasf_pars(theta=np.pi/3, _nside=32, dr2_sf=None, sub_sf=None, masks=None, _m_grid=np.arange(0.,25.01,0.1)):
+
+    # Equatorial coordinates of North and South poles
+    ns_eq = SkyCoord(l=[0,0],b=[90,-90], unit='deg',frame='galactic').icrs
+
+    # Get healpix coordinates
+    hp_ra, hp_dec = hp.pix2ang(_nside, np.arange(hp.nside2npix(_nside)), nest=True, lonlat=True)
+    hp_eq=SkyCoord(ra=hp_ra, dec=hp_dec, unit='deg')
+    hp_gal=hp_eq.galactic
+    hp_l=hp_gal.l.deg; hp_b=np.abs(hp_gal.b.deg)
+
+    print('Higher Res:')
+    # HEALPix at high res
+    nside_highres=1024
+    rapix, decpix = hp.pix2ang(nside_highres, np.arange(hp.nside2npix(nside_highres)), lonlat=True, nest=True)
+    ra_poles = ns_eq.ra.rad; dec_poles = ns_eq.dec.rad
+    sep_poles = np.arccos(np.sin(dec_poles)*np.sin(np.deg2rad(decpix[:,None])) \
+                  + np.cos(dec_poles)*np.cos(np.deg2rad(decpix[:,None]))*np.cos(ra_poles-np.deg2rad(rapix[:,None])))
+    if masks is None:
+        pixweight = np.sum(np.reshape(np.sum(sep_poles<np.pi/2-theta, axis=1), (-1, int ( nside_highres/_nside )**2)), axis=1)/ int ( nside_highres/_nside )**2
+    else:
+        ra_mask, dec_mask, rad_mask = masks
+        sep_mask = np.arccos(np.sin(np.deg2rad(dec_mask))*np.sin(np.deg2rad(decpix[:,None])) \
+                  + np.cos(np.deg2rad(dec_mask))*np.cos(np.deg2rad(decpix[:,None]))*\
+                    np.cos(np.deg2rad(ra_mask)-np.deg2rad(rapix[:,None])))
+        pixweight = np.sum(np.reshape(np.sum(sep_poles<np.pi/2-theta, axis=1) * np.prod(sep_mask > rad_mask, axis=1).astype(bool),
+                                                        (-1, int ( nside_highres/_nside )**2)), axis=1)/ int ( nside_highres/_nside )**2
+
+    # Number of scans in each pixel
+    _b_pixels = hp_b[pixweight>0];
+    pixel_area = 4*np.pi/hp.nside2npix(_nside) * pixweight[pixweight>0]
+    pixel_id = np.arange(hp.nside2npix(_nside))[pixweight>0]
+
+    # Bin in sinb and get unique sinb bins
+    _sinb_bins = np.linspace(np.sin(theta), 1, 11); _sinb_vals = (_sinb_bins[1:] + _sinb_bins[:-1])/2
+    _sinb_pixels = _sinb_vals[((np.sin(np.deg2rad(_b_pixels)) - np.sin(theta) )\
+                               /(1-np.sin(theta)) * 10).astype(int)]
+    uni_sinb_pixels, idx_sinb_pixels = np.unique(_sinb_pixels, return_inverse=True)
+
+
+    gg, ll = np.meshgrid(_m_grid, hp_l[pixel_id])
+    gg, bb = np.meshgrid(_m_grid, hp_b[pixel_id])
+    coords = Source(ll, bb, unit='deg', frame='galactic', photometry={'gaia_g':gg})
+
+    print('Gaia SF:')
+    # Gaia SFprob:
+    #_n_pixels = np.median(dr2_sf._n_field.reshape(-1, int(4096/_nside)**2), axis=1).astype(int)[pixweight>0]
+    _n_pixels = np.median(dr2_sf._n_field.reshape(hp.nside2npix(_nside), dr2_sf._n_field.shape[0]//hp.nside2npix(_nside)), axis=1).astype(int)[pixweight>0]
+    _alpha, _beta = dr2_sf._alpha_interpolator(_m_grid), dr2_sf._beta_interpolator(_m_grid)
+    _alpha[_alpha<1e-2] = 1e-2; _alpha[_alpha>1e+2] = 1e+2
+    _beta[_beta<1e-2] = 1e-2; _beta[_beta>1e+2] = 1e+2
+    _alpha,_=np.meshgrid(_alpha, _n_pixels)
+    _beta,_=np.meshgrid(_beta, _n_pixels)
+    _m,_n=np.meshgrid(_m_grid, _n_pixels)
+    _sfprob = gaia_sf(_alpha, _beta, _n, _m)
+    print('Ast SF:', gg.shape)
+    # Sub SF prob
+    if sub_sf is not None: _sfprob *= sub_sf(coords, grid=False)
+
+
+    gsf_pars={'uni_sinb_pixels':uni_sinb_pixels, 'idx_sinb_pixels':idx_sinb_pixels,
+              'pixel_area':pixel_area, 'pixel_id':pixel_id,
+              '_selectionfunction':_sfprob, '_m_grid':_m_grid}
+
+    return gsf_pars
+
 def apply_gaiasf(l_sample, b_sample, G_sample, get_prob=True, dr2_sf=None, _nside=64):
 
     if dr2_sf is None: dr2_sf = CoGii.dr2_sf(version='modelAB', crowding=False)

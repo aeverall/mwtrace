@@ -20,12 +20,12 @@ import disk_halo_mstogap as dh_msto
 # Load class instance
 from TracerFit import mwfit, int_idx
 
-def load_sample(filename, cardinal, sid=None, size=1000):
+def load_sample(filename, cardinal, sid=None, size=1000, extra_cols=[]):
 
-    keys = ['source_id', 'phot_g_corr', 'parallax', 'b', 'parallax_error', 'zeropoint']
+    keys = ['source_id', 'phot_g_corr', 'parallax', 'l', 'b', 'parallax_error', 'zeropoint'] + extra_cols
     sample = {};
     with h5py.File(filename, 'r') as hf:
-        subset = ( ~np.isnan(hf[cardinal]['phot_g_corr'][...]) )
+        subset = ( ~np.isnan(hf[cardinal]['phot_g_corr'][...]) & ~np.isnan(hf[cardinal]['parallax'][...]) )
         print('%d/%d' % (np.sum(subset), len(subset)))
         if sid is None:
             if size=='full': subsample  = np.arange(np.sum(subset))
@@ -42,6 +42,7 @@ def load_sample(filename, cardinal, sid=None, size=1000):
     sample['M'] = sample['m'] + 5*(np.log10(sample['parallax_obs'])-2)
     # subset = ((sample['M']<12)|(sample['parallax_obs']/sample['parallax_error']<1))&(sample['m']>5)&(sample['m']<22)
     subset = (sample['parallax_obs']-sample['parallax_error'] < 10**((22-sample['m'])/5)) & (sample['m']>5) & (sample['m']<22)
+    #subset = (sample['m']>5) & (sample['m']<22)
 
     print('MG<12 cut: %d/%d' % (np.sum((sample['parallax_obs']-sample['parallax_error'] < 10**((22-sample['m'])/5))), len(sample['m'])))
     print('G<22 cut: %d/%d' % (np.sum(sample['m']<22), len(sample['m'])))
@@ -53,21 +54,39 @@ def load_sample(filename, cardinal, sid=None, size=1000):
 
     return sample
 
+def mask_subset(masks, lb_source):
+
+    ra_mask, dec_mask, rad_mask = masks
+
+    # Remove sources
+    from astropy.coordinates import SkyCoord
+    coords = SkyCoord(l=lb_source[0], b=lb_source[1], unit='deg', frame='galactic').icrs
+    ra_source, dec_source = coords.ra.rad, coords.dec.rad
+    sep_mask = np.arccos(np.sin(dec_source)*np.sin(np.deg2rad(dec_mask[:,None])) \
+                  + np.cos(dec_source)*np.cos(np.deg2rad(dec_mask[:,None]))*\
+                    np.cos(ra_source-np.deg2rad(ra_mask[:,None])))
+    subset = np.prod(sep_mask.T > rad_mask, axis=1).astype(bool)
+
+    return subset
+
+
 
 if __name__=='__main__':
 
     times = []; checkpoints = []
     times.append(time.time()); checkpoints.append('start')
 
-    run_id=7
-    size = "full" # 100000
-    file = "gaia"
-    file = "gaia_edr3.gaia_source_b80"
-    cardinal = "north"
+    run_id=9
+    size = "full" # 100000 # "full" #
+    #file = "gaia"
+    #file = "gaia_edr3.gaia_source_b80"
+    file = "gaia_unwise_sdssspec_b80";
+    extra_cols = ['bp_rp', 'w1', 'w2', 'phot_bp_rp_excess_factor_c']
+    cardinal = "south"
     # Load Sample
     filename="/data/asfe2/Projects/mwtrace_data/gaia/%s.h" % file
     #keys = {'phot_g_mean_mag':'phot_g_mean_mag', 'parallax':'parallax', 'b':'b', 'parallax_error':'parallax_error', }
-    sample = load_sample(filename, cardinal, sid=None, size=size)
+    sample = load_sample(filename, cardinal, sid=None, size=size, extra_cols=extra_cols)
     #raise KeyboardInterrupt()
 
     # Get Gaia Selection Function
@@ -86,14 +105,38 @@ if __name__=='__main__':
                     spherical_basis_directory='/data/asfe2/Projects/astrometry/SphericalWavelets/')
     print("SF Mbins: ", ast_sf.Mbins)
 
+    masks = None
+    if True:
+        # Mask out to 4 halflight radii
+        masks = np.array([[15.0392, -33.7092, 11.3],
+                          [13.188,  -26.583,  6.1]]).T
+        masks[2] *= 4 * np.pi/180/60
+        subset = mask_subset(masks, np.vstack((sample['l'], sample['b'])))
+        print(f"Mask subset: {np.sum(subset):.0f}/{len(subset):.0f}")
+        for key in sample.keys():
+            sample[key] = sample[key][subset]
+
+    if True:
+        # Remove extragalactic objects
+        excess_cut = 1.8; w1w2_cut=0.5; bprp_cut=1.2
+        galaxies = sample['phot_bp_rp_excess_factor_c']>excess_cut
+        quasars  = (sample['w1']-sample['w2']>w1w2_cut)&((sample['bp_rp'])<(sample['w1']-sample['w2'])+0.7)
+        subset = ~(galaxies|quasars)
+        print(np.sum(galaxies), np.sum(quasars))
+        print(f"Non-extragalactic subset: {np.sum(subset):.0f}/{len(subset):.0f}")
+        for key in sample.keys():
+            sample[key] = sample[key][subset]
+
+    # Drop out message
     message = f"""\n{run_id:03d} ---> {file}, {cardinal}, p-perr<10^((22-G)/5) or Parallax SNR<1, 5<G<12, Sample size: {len(sample['source_id']):d}
                  11 free parameters. hz_halo limited [3.,7.3]. all alpha3 fixed. dirichlet alpha=2.
                  perr gradient evaluation made numerically. ftol=1e-12, gtol=1e-7. When lnp=nan in mcmc - return 1e-20.
                  Gaia SF: EDR3 (from Scanning Law)
-                 Astrometry SF: {map_fname}."""
-
+                 Astrometry SF: {map_fname}.
+                 Sculptor and NGC288 masks: {masks.flatten()}.
+                 Filtered extragalactic objects. """
     print(message)
-    # raise KeyboardInterrupt()
+    raise KeyboardInterrupt()
     with open(f'/data/asfe2/Projects/mwtrace_data/gaia/messages.txt', 'a') as f:
         f.write(message)
 
@@ -134,7 +177,7 @@ if __name__=='__main__':
     times.append(time.time()); checkpoints.append('initialised')
 
     nstep_all=5000
-    if False:
+    if True:
         Hotstart=False
         save_file = f'/data/asfe2/Projects/mwtrace_data/gaia/gaia_{file}_{size}_{cardinal}_sf_perr_{run_id:03d}.h'
         backend = emcee.backends.HDFBackend(f'/data/asfe2/Projects/mwtrace_data/gaia/gaia_{file}_{size}_{cardinal}_sf_perr_{run_id:03d}_backend.h');
@@ -145,7 +188,7 @@ if __name__=='__main__':
 
             model_sf_err = mwfit(free_pars=free_pars, fixed_pars=fixed_pars, sample=sample, sf_bool=True, perr_bool=True, sub_sf=True, param_trans=param_trans)
             model_sf_err.sample['sf_subset'] = np.ones(len(sample['m'])).astype(bool)
-            model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside)
+            model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside, masks=masks)
             model_sf_err._generate_kwargs()
             print('bounds:\n', model_sf_err.poisson_kwargs['param_bounds'])
 
@@ -167,7 +210,7 @@ if __name__=='__main__':
             model_sf_err = mwfit(free_pars=free_pars, fixed_pars=fixed_pars, sample=sample, sf_bool=True, perr_bool=True, sub_sf=True, param_trans=param_trans)
             model_sf_err.sample['sf_subset'] = np.ones(len(sample['m'])).astype(bool)
             model_sf_err.load(save_file)
-            model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside)
+            model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside, masks=masks)
             model_sf_err._generate_kwargs()
             print('bounds:\n', model_sf_err.poisson_kwargs['param_bounds'])
 
@@ -178,7 +221,7 @@ if __name__=='__main__':
 
         times.append(time.time()); checkpoints.append('SF and parallax error')
 
-    if True:# Mto shifted for components
+    if False:# Mto shifted for components
         Hotstart=False
         save_file = f'/data/asfe2/Projects/mwtrace_data/gaia/gaia_{file}_{size}_{cardinal}_Mto_{run_id:03d}.h'
         backend = emcee.backends.HDFBackend(f'/data/asfe2/Projects/mwtrace_data/gaia/gaia_{file}_{size}_{cardinal}_Mto_{run_id:03d}_backend.h');
@@ -195,7 +238,7 @@ if __name__=='__main__':
 
             model_sf_err = mwfit(free_pars=free_pars, fixed_pars=fixed_pars, sample=sample, sf_bool=True, perr_bool=True, sub_sf=True, param_trans=param_trans)
             model_sf_err.sample['sf_subset'] = np.ones(len(sample['m'])).astype(bool)
-            model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside)
+            model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside, masks=masks)
             model_sf_err._generate_kwargs()
             print('bounds:\n', model_sf_err.poisson_kwargs['param_bounds'])
 
@@ -217,7 +260,7 @@ if __name__=='__main__':
             model_sf_err = mwfit(free_pars=free_pars, fixed_pars=fixed_pars, sample=sample, sf_bool=True, perr_bool=True, sub_sf=True, param_trans=param_trans)
             model_sf_err.sample['sf_subset'] = np.ones(len(sample['m'])).astype(bool)
             model_sf_err.load(save_file)
-            model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside)
+            model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside, masks=masks)
             model_sf_err._generate_kwargs()
             print('bounds:\n', model_sf_err.poisson_kwargs['param_bounds'])
 
