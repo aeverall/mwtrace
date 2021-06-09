@@ -26,17 +26,19 @@ if __name__=='__main__':
     times = []; checkpoints = []
     times.append(time.time()); checkpoints.append('start')
 
-    run_id=23
-    size = 1000000
+    run_id=24
+    size = 500000
     file = "sample_dr3asf"
     # Load Sample
     sample = {}; true_pars={}; latent_pars={};
+    smax = np.inf
     magcuts = [-100,200]
     filename="/data/asfe2/Projects/mwtrace_data/mockmodel/%s.h" % file
     with h5py.File(filename, 'r') as hf:
         print('low', np.sum(hf['sample']['m'][...]<magcuts[0]))
         print('high', np.sum(hf['sample']['m'][...]>magcuts[1]))
-        subset = (hf['sample']['m'][...]>magcuts[0])&(hf['sample']['m'][...]<magcuts[1])
+        print('distant', np.sum(hf['sample']['s'][...]>smax))
+        subset = (hf['sample']['m'][...]>magcuts[0])&(hf['sample']['m'][...]<magcuts[1])&(hf['sample']['s'][...]<smax)
         print('%d/%d' % (np.sum(subset), len(subset)))
         subsample  = np.sort(np.random.choice(np.arange(np.sum(subset)), size=size, replace=False))
         for key in hf['sample'].keys():
@@ -50,9 +52,10 @@ if __name__=='__main__':
                 for par in hf['true_pars'][key].keys():
                     true_pars[int_idx(key)][par]=hf['true_pars'][key][par][...]
     for j in range(3): true_pars[j]['w']*=size
+    true_pars['smax'] = smax
     print(sample.keys())
 
-    if True:
+    if False:
         # Apply Gaia Selection Function
         from selectionfunctions.carpentry import chisel
         import selectionfunctions.cog_ii as CoGii
@@ -81,11 +84,17 @@ if __name__=='__main__':
                      Parallax error: From ASF.
                      Testing mask code."""
 
-    true_pars = true_pars
-    sample = sample
+        print("Nan parallax error: ", np.sum(np.isnan(sample['parallax_error'])))
+        print("Nan perr in subset: ", np.sum(sample['astsf_subset']&np.isnan(sample['parallax_error'])))
 
-    print("Nan parallax error: ", np.sum(np.isnan(sample['parallax_error'])))
-    print("Nan perr in subset: ", np.sum(sample['astsf_subset']&np.isnan(sample['parallax_error'])))
+    message = f"""\n{run_id:03d} ---> {file}, Sample size: {size:d},
+                 11 free parameters. hz_halo limited [3.,7.3]. logw [0,30]. all alpha3 fixed. dirichlet alpha=2.
+                 perr gradient evaluation made numerically. ftol=1e-12, gtol=1e-7. When lnp=nan in mcmc - return 1e-20.
+                 Parallax error: From ASF.
+                 Testing distance trunctation: smax{smax}"""
+
+    # true_pars = true_pars
+    # sample = sample
 
     with open(f'/data/asfe2/Projects/mwtrace_data/mockmodel/messages.txt', 'a') as f:
         f.write(message)
@@ -116,11 +125,12 @@ if __name__=='__main__':
                       'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
                       'alpha3':('nexp',0,0,-1,0,'none'),
                       'hz': ('logit_scaled', 3.,  7.3,-10,10,'logistic')}
+    utils_directory = '/data/asfe2/Projects/mwtrace_data/utils'
 
     times.append(time.time()); checkpoints.append('initialised')
 
     nstep_all=5000
-    if True:
+    if False:
         save_file = f'/data/asfe2/Projects/mwtrace_data/mockmodel/mock_{file}_{size:d}_sf_perr_{run_id:03d}.h'
         if os.path.exists(save_file):
             raise ValueError('File %s already exists...')
@@ -147,7 +157,7 @@ if __name__=='__main__':
 
         times.append(time.time()); checkpoints.append('SF and parallax error')
 
-    if True:
+    if False:
         save_file = f'/data/asfe2/Projects/mwtrace_data/mockmodel/mock_{file}_{size:d}_sfast_{run_id:03d}.h'
         if os.path.exists(save_file):
             raise ValueError('File %s already exists...')
@@ -179,7 +189,7 @@ if __name__=='__main__':
             raise ValueError('File %s already exists...')
 
         model_full = mwfit(free_pars=free_pars, fixed_pars=true_pars, sample=sample, sf_bool=False, perr_bool=False, param_trans=param_trans)
-        model_full._generate_fid_pars()
+        model_full._generate_fid_pars(directory=utils_directory)
         model_full._generate_kwargs()
         print('bounds:\n', model_full.poisson_kwargs['param_bounds'])
         # Sample from prior
@@ -189,9 +199,9 @@ if __name__=='__main__':
         print("True likelihood: ", model_full.evaluate_likelihood(true_params_f))
         print(true_params_f, end="\n")
         # Optimize with BFGS
-        model_full.optimize_parallel(niter=10, ncores=10, label='full_bfgs', method='L-BFGS-B', verbose=True, minimize_options={'disp':False})
+        model_full.optimize_parallel(niter=2, ncores=2, label='full_bfgs', method='L-BFGS-B', verbose=True, minimize_options={'disp':False})
         # Run MCMC
-        model_full.mcmc(ncores=20, nsteps=nstep_all, label='full_mcmc', optimize_label='full_bfgs')
+        model_full.mcmc(ncores=2, nsteps=nstep_all, label='full_mcmc', optimize_label='full_bfgs')
         # Save results
         model_full.save(save_file, true_pars, mode='w')
 

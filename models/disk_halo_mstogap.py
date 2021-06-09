@@ -11,7 +11,7 @@ disk_cone_plcut: Tracer Density model module.
 import sys, os
 sys.path.append('../utilities/')
 import functions, sf_utils, numba_special
-import numpy as np, scipy, healpy as hp
+import numpy as np, scipy, healpy as hp, h5py
 from numba import njit
 from copy import deepcopy as copy
 
@@ -35,6 +35,7 @@ def logmodel_grad(sample, params, gmm=None, fid_pars=None, grad=False):
 
     # Defined paramers
     theta=fid_pars['lat_min']; Mx=fid_pars['Mmax']; R0=fid_pars['R0']
+    nu_norm=fid_pars['halomodel_nu_norm']
 
     # Absmag
     M = m_mu - 10 + 5*log_pi_mu/ln10
@@ -53,7 +54,8 @@ def logmodel_grad(sample, params, gmm=None, fid_pars=None, grad=False):
                                                 Mms1=transformed_params[j]['Mms1'],
                                                 Mms2=transformed_params[j]['Mms2'],
                                                 Mto=transformed_params[j]['Mto'],
-                                                Mx=Mx, R0=R0, grad=grad)
+                                                Mx=Mx, R0=R0, grad=grad,
+                                                nu_norm=nu_norm)
         if grad: logcmpts[:,j], grad_lambda[:-1,:,j] = output
         else: logcmpts[:,j] = output
 
@@ -84,7 +86,7 @@ def logmodel_grad(sample, params, gmm=None, fid_pars=None, grad=False):
     return logsumexp, (grad_model.T*jacobian).T# + 2*np.log(np.tan(theta)) + log_cos_lat, grad_model
 
 def log_expmodel_grad(pi_mu, abs_sin_lat, m_mu, M, log_pi_mu, hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
-                                Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, grad=False):
+                                Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, grad=False, nu_norm=None):
 
     ep1=1.3; ep2=2.3;
     a1=-ln10*(ep1-1)/(2.5*alpha1); a2=-ln10*(ep2-1)/(2.5*alpha2);
@@ -161,7 +163,7 @@ def log_expmodel_grad(pi_mu, abs_sin_lat, m_mu, M, log_pi_mu, hz=1., alpha1=-1.,
     return log_lambda, grad_lambda.T#np.exp(log_lambda)*grad_lambda.T
 
 def log_halomodel_grad(pi_mu, abs_sin_lat, m_mu, M, log_pi_mu, hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
-                                Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, grad=False):
+                                Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, grad=False, nu_norm=None):
 
     ep1=1.3; ep2=2.3;
     a1=-ln10*(ep1-1)/(2.5*alpha1); a2=-ln10*(ep2-1)/(2.5*alpha2);
@@ -193,7 +195,9 @@ def log_halomodel_grad(pi_mu, abs_sin_lat, m_mu, M, log_pi_mu, hz=1., alpha1=-1.
                            log_AG  + alpha3*(Mto+10-m_mu))))
 
     #pnorm = (8*scipy.special.gamma(hz/2))/(R0**3 * np.sqrt(np.pi) * scipy.special.gamma((hz-3)/2))
-    log_pnorm = np.log(8) + scipy.special.gammaln(hz/2) - 3*np.log(R0) - 0.5*np.log(np.pi) - scipy.special.gammaln((hz-3)/2)
+    # log_pnorm = np.log(8) + scipy.special.gammaln(hz/2) - 3*np.log(R0) - 0.5*np.log(np.pi) - scipy.special.gammaln((hz-3)/2)
+    log_pnorm = nu_norm(hz)
+
     log_p = - hz/2 * np.log((abs_sin_lat**2)/(pi_mu**2 * R0**2) + 1)  + np.where(pop1, n1*log_pi_mu,
                                                                         np.where(popg, ng*log_pi_mu,
                                                                         np.where(pop2, n2*log_pi_mu,
@@ -204,7 +208,9 @@ def log_halomodel_grad(pi_mu, abs_sin_lat, m_mu, M, log_pi_mu, hz=1., alpha1=-1.
 
     grad_lambda = np.zeros((log_pi_mu.shape[0], 6)) + np.nan
     # hz
-    grad_lambda[:,0] = scipy.special.digamma(hz/2)/2 - scipy.special.digamma((hz-3)/2)/2 - 1/2 * np.log((abs_sin_lat**2)/(pi_mu**2 * R0**2) + 1)
+    # grad_lambda[:,0] = scipy.special.digamma(hz/2)/2 - scipy.special.digamma((hz-3)/2)/2 - 1/2 * np.log((abs_sin_lat**2)/(pi_mu**2 * R0**2) + 1)
+    dhz = hz*1e-5
+    grad_lambda[:,0] = (nu_norm(hz+dhz)-log_pnorm)/dhz - 1/2 * np.log((abs_sin_lat**2)/(pi_mu**2 * R0**2) + 1)
     # alpha3
     grad_lambda[:,1] = np.where(pop2, 0, 1/alpha3 + Mto+10-m_mu - 5*log_pi_mu/ln10)
     # fD
@@ -642,6 +648,48 @@ def halomodel_perr_d2logIJ_dp2_dh(p, beta, n, h, mu, err, transform='none', b=No
     if   transform=='none':     return d2logI_dp2
     elif transform=='logit':    return d2logI_dp2 - 1/p**2 - 1/(p-b)**2
     elif transform=='logit_ab': return d2logI_dp2 - 1/(p-a)**2 - 1/(p-b)**2
+
+def halomodel_dist_trunc(smax, bmin, R0=8.27, directory=None):
+
+    """
+    Return function to evaluate halo normalisation as a function of n.
+    """
+
+    # For infinite smax, halo normalisation is analytic.
+    if np.isinf(smax):
+        #return lambda n: R0**3 * np.tan(np.deg2rad(bmin))**(-2) * (np.sqrt(np.pi)/8) * scipy.special.gamma((n_grid-3)/2)/scipy.special.gamma(n_grid/2)
+        return lambda n: np.log(8) + scipy.special.gammaln(n/2) - 3*np.log(R0) - 0.5*np.log(np.pi) - scipy.special.gammaln((n-3)/2)
+
+    file = f"smax{smax:.0f}_bmin{bmin:.0f}_R0{R0:.2f}.h"
+    if os.path.exists(os.path.join(directory, file)):
+        with h5py.File(os.path.join(directory, file), 'r') as hf:
+            n = hf['n'][...]
+            logI = hf['logI'][...]
+    else:
+        def halo_nu_integrand(sinb, s, n, R0=8.27):
+            return s**2 * (sinb**2 * s**2/R0**2 + 1)**(-n/2)
+        def halo_nu_integral(n_grid, smax, ss_scaled, sinbsinb, R0=8.27):
+            # Rescale from 1:10 to 10^-2:smax
+            I = np.zeros(n_grid.shape[0])
+            ss = ss_scaled**(np.log10(smax)--2) / 100
+            for i, n in tqdm.tqdm(enumerate(n_grid), total=len(n_grid)):
+                integrand = halo_nu_integrand(sinbsinb, ss, n)
+                I[i] = np.sum( (integrand[:-1,:-1] + integrand[1:,1:])/2 * (ss[0,1:]-ss[0,:-1])[None,:] * (sinbsinb[1:,0]-sinbsinb[:-1,0])[:,None] )
+            return I
+        n = np.linspace(1, 8, 1501)
+        sinb = np.linspace(np.sin(np.deg2rad(bmin)),1,101)
+        s_scaled = np.logspace(0,1,1001)
+        ss_scaled, sinbsinb = np.meshgrid(s_scaled, sinb)
+        logI = np.log(halo_nu_integral(n, smax, ss_scaled, sinbsinb)) + 2*np.log(np.tan(np.deg2rad(bmin)))
+        # I = halo_nu_integral(n, smax, ss_scaled, sinbsinb)
+        # print(I)
+        # logI = np.log(I)
+
+        with h5py.File(os.path.join(directory, file), 'w') as hf:
+            hf.create_dataset('n', data=n)
+            hf.create_dataset('logI', data=logI)
+
+    return scipy.interpolate.interp1d(n, -logI)
 
 #%% Integral of model over parameter space.
 def integral_model(params, bins=None, fid_pars=None, grad=False):

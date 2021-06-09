@@ -241,10 +241,10 @@ class mwfit():
 
         return params
 
-    def _generate_fid_pars(self, **gsf_kwargs):
+    def _generate_fid_pars(self, directory=None, **gsf_kwargs):
 
-        fid_pars = {'Mmax':self.fixed_pars['Mx'],  'lat_min':np.deg2rad(self.fixed_pars['theta_deg']), 'R0':self.fixed_pars['R0'],
-                    'free_pars':{}, 'fixed_pars':{par:self.fixed_pars[par] for par in ['Mx','theta_deg','R0']},
+        fid_pars = {'Mmax':self.fixed_pars['Mx'],  'lat_min':np.deg2rad(self.fixed_pars['theta_deg']), 'R0':self.fixed_pars['R0'], 'smax':self.fixed_pars['smax'],
+                    'free_pars':{}, 'fixed_pars':{par:self.fixed_pars[par] for par in ['Mx','theta_deg','R0','smax']},
                     'functions':{}, 'functions_inv':{}, 'jacobians':{}, 'w':True,
                     'components':self.components, 'ncomponents':len(self.components)}
 
@@ -274,6 +274,10 @@ class mwfit():
                 fid_pars['priors'][cmpt][par] = self.param_trans[cmpt][par][5:]
                 params_i += 1;
 
+        # Function for halo spatial model normalisation
+        fid_pars['halomodel_nu_norm'] = dh_msto.halomodel_dist_trunc(fid_pars['smax'], np.rad2deg(fid_pars['lat_min']),
+                                                                     fid_pars['R0'], directory=directory)
+
         # Gaia selection function applied
         if self.sf_bool:
             print('Getting Selectionfunction pars')
@@ -289,6 +293,7 @@ class mwfit():
         self.poisson_kwargs = {'param_bounds':self.bounds, 'gmm':None, 'bins':([0,np.inf],[-np.inf,np.inf]),
                                  'fid_pars':self.fid_pars, 'model_prior':dh_msto.model_prior,'prior_kwargs':{'dropoff':1e10}}
 
+        # Source model
         if not self.perr_bool:
             sample_2d = np.vstack((1/self.sample['s'], np.log(1/self.sample['s']),
                                      self.sample['sinb'], np.log(np.sqrt(1-self.sample['sinb']**2)),
@@ -303,6 +308,7 @@ class mwfit():
             self.fid_pars['models']=[{'disk':dh_msto.log_expmodel_perr_grad, 'halo':dh_msto.log_halomodel_perr_grad}[cmpt] for cmpt in self.components]
             self.poisson_kwargs['logmodel'] = dh_msto.logmodel_perr_grad
 
+        # Integral model
         if not self.sf_bool:
             self.poisson_kwargs['sample'] = sample_2d
             self.poisson_kwargs['model_integrate'] = dh_msto.integral_model
