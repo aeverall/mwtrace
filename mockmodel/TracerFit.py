@@ -398,6 +398,8 @@ class mwfit():
         for key in ['fixed_pars', 'param_trans', 'source_id', 'true_pars', 'free_pars']:
             self.__dict__[key] = data[key]
 
+        print(data.keys())
+
         for par in ['Mms','Mms1','Mms2']:
             self.fixed_pars[par] = self.fixed_pars[0][par]
 
@@ -446,12 +448,15 @@ class mwfit():
 
         return params_f
 
-    def get_labels(self):
+    def get_labels(self, label_set=None):
 
         labels=[];
+        i=0;
         for cmpt in np.arange(len(self.components)).tolist()+['shd',]:
             for par in self.free_pars[cmpt]:
-                labels+=[func_labels[self.param_trans[cmpt][par][0]](label_dict[par], *self.param_trans[cmpt][par][1:3]),]
+                if label_set is None: labels+=[func_labels[self.param_trans[cmpt][par][0]](label_dict[par], *self.param_trans[cmpt][par][1:3]),]
+                else: labels+=[func_labels[self.param_trans[cmpt][par][0]](label_set[i], *self.param_trans[cmpt][par][1:3]),]
+                i+=1
         return labels
 
 def nloglikelihood(x, id=-1):

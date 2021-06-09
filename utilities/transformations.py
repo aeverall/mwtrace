@@ -35,3 +35,7 @@ func_labels = {'none': lambda s, a, b: s,
 
 label_dict = {'alpha1':r'$\alpha_1$', 'alpha2':r'$\alpha_2$', 'alpha3':r'$\alpha_3$',
               'fD': r'$f_D$', 'hz':r'$h_z$', 'w':r'$w$'}
+label_set = [r'$w$', r'$h_\mathrm{Tn}$', r'$f_D$',
+             r'$w$', r'$h_\mathrm{Tk}$', r'$f_D$',
+             r'$w$', r'$n_\mathrm{H}$', r'$f_D$',
+             r'$\alpha_1$', r'$\alpha_2$']

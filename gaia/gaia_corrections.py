@@ -14,14 +14,18 @@ data={}
 # Download catalogue
 columns = ["b", "phot_g_mean_mag", "astrometric_params_solved", "nu_eff_used_in_astrometry", "pseudocolour", "bp_rp"]
 
-catalogue = "dr2xedr3"#"gaia_edr3.gaia_source"
-cat_label = "_dr3"
+catalogue = "gaia_unwise_sdss"#"dr2xedr3"#"gaia_edr3.gaia_source"
+cat_label = ""#"_dr3"
 b_min = 80
 file = f'/data/asfe2/Projects/mwtrace_data/gaia/{catalogue}_b{b_min}.h'
+print(file)
+
+
 
 for cardinal in ["north", "south"]:
 
     with h5py.File(file, 'r') as hf:
+        print(hf.keys())
         for col in columns: data[col] = hf[cardinal][col][...]
 
     print('astrometric_params_solved: ', np.unique(data['astrometric_params_solved'+cat_label]))

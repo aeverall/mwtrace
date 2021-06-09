@@ -1118,7 +1118,7 @@ def gaiasf_integrand_halo_grad(m, sinb, _selectionfunction,
 
     return _uni_grid, full_grad_I
 
-def appmag_model_subgaiaSF(params, fid_pars=None):
+def appmag_model_subgaiaSF(params, fid_pars=None, sf=True):
 
     # Input Parameters
     ncomponents=fid_pars['ncomponents']
@@ -1139,7 +1139,8 @@ def appmag_model_subgaiaSF(params, fid_pars=None):
                                     Mx=fid_pars['Mmax'], R0=fid_pars['R0'], theta=fid_pars['lat_min'], grad=False)
 
         # Summing over pixels is pretty fast!
-        integrand = integrand[gsf_pars['idx_sinb_pixels']]*gsf_pars['_selectionfunction']
+        if sf: integrand = integrand[gsf_pars['idx_sinb_pixels']]*gsf_pars['_selectionfunction']
+        else: integrand = integrand[gsf_pars['idx_sinb_pixels']]
         integralcmpts[j] = np.sum( integrand.T*gsf_pars['pixel_area']/(4*np.pi), axis=1 )
 
         weights[j] = transformed_params[j]['w']
