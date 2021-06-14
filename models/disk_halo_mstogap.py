@@ -1724,17 +1724,20 @@ def exponent_tophat(x, bounds, grad=False, dropoff=1e10):
 
 
 #%% Model Distribution
-def z_component_models(z, hz=1., R0=8.27, component=None):
+def z_component_models(z, hz=1., R0=8.27, bmin=80, smax=np.inf, component=None, directory=None):
     if component=='disk':
         norm = 1/(2*hz**3)
         dist = np.exp(-z/hz)
     elif component=='halo':
-        norm = 4*scipy.special.gamma(hz/2)/(R0**3 * np.sqrt(np.pi) * scipy.special.gamma((hz-3)/2))
+        norm_function = halomodel_dist_trunc(smax, bmin, R0=R0, directory=directory)
+        norm = np.exp(norm_function(hz))/2
+        # norm = 4*scipy.special.gamma(hz/2)/(R0**3 * np.sqrt(np.pi) * scipy.special.gamma((hz-3)/2))
         dist = ((z**2)/(R0**2) + 1)**(-hz/2)
+        dist[z>smax]=0.
 
     return norm*dist
 
-def z_model(z, params, fid_pars=None, model='combined'):
+def z_model(z, params, fid_pars=None, model='combined', directory='/data/asfe2/Projects/mwtrace_data/utils/'):
 
     # Input Parameters
     ncomponents=fid_pars['ncomponents']
@@ -1743,7 +1746,8 @@ def z_model(z, params, fid_pars=None, model='combined'):
     dist_cmpts = np.zeros((len(z), ncomponents))
     weights = np.zeros(ncomponents)
     for j in range(ncomponents):
-        dist_cmpts[:,j] = z_component_models(z, hz=transformed_params[j]['hz'], R0=fid_pars['R0'], component=fid_pars['components'][j])
+        dist_cmpts[:,j] = z_component_models(z, hz=transformed_params[j]['hz'], R0=fid_pars['R0'], smax=fid_pars['smax'],
+                                                component=fid_pars['components'][j], directory=directory)
         weights[j] = transformed_params[j]['w']
 
     if model=='combined': return  z**2 * np.sum(weights*dist_cmpts, axis=1)
