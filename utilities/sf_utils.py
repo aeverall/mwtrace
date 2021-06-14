@@ -35,11 +35,13 @@ def apply_subgaiasf(l_sample, b_sample, G_sample, get_prob=True, dr2_sf=None, su
     _alpha_sample[_alpha_sample<1e-2] = 1e-2; _alpha_sample[_alpha_sample>1e+2] = 1e+2
     _beta_sample[_beta_sample<1e-2] = 1e-2; _beta_sample[_beta_sample>1e+2] = 1e+2
 
+    print('Gaia SF prob')
     sf_prob = gaia_sf(_alpha_sample, _beta_sample, _n_sample, G_sample)
 
     # Sub sf prob
+    print('Sub SF prob')
     if sub_sf is not None:
-        sf_prob *= sub_sf(c, grid=False)
+        sf_prob *= sub_sf(c, grid=True)
 
     subset = sf_prob>np.random.rand(len(_n_sample))
 
@@ -104,7 +106,7 @@ def get_subgaiasf_pars(theta=np.pi/3, _nside=32, dr2_sf=None, sub_sf=None, _m_gr
     _sfprob = gaia_sf(_alpha, _beta, _n, _m)
     print('Ast SF:', gg.shape)
     # Sub SF prob
-    if sub_sf is not None: _sfprob *= sub_sf(coords, grid=False)
+    if sub_sf is not None: _sfprob *= sub_sf(coords, grid=True)
 
 
     gsf_pars={'uni_sinb_pixels':uni_sinb_pixels, 'idx_sinb_pixels':idx_sinb_pixels,

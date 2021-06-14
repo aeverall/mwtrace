@@ -275,6 +275,7 @@ class mwfit():
                 params_i += 1;
 
         # Function for halo spatial model normalisation
+        print('directory: ', directory)
         fid_pars['halomodel_nu_norm'] = dh_msto.halomodel_dist_trunc(fid_pars['smax'], np.rad2deg(fid_pars['lat_min']),
                                                                      fid_pars['R0'], directory=directory)
 

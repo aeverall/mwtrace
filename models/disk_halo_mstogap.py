@@ -194,7 +194,7 @@ def log_halomodel_grad(pi_mu, abs_sin_lat, m_mu, M, log_pi_mu, hz=1., alpha1=-1.
             np.where(pop2, log_Ams - np.log(a2) + alpha2*(Mms+10-m_mu),
                            log_AG  + alpha3*(Mto+10-m_mu))))
 
-    #pnorm = (8*scipy.special.gamma(hz/2))/(R0**3 * np.sqrt(np.pi) * scipy.special.gamma((hz-3)/2))
+    #log_pnorm = (8*scipy.special.gamma(hz/2))/(R0**3 * np.sqrt(np.pi) * scipy.special.gamma((hz-3)/2))
     # log_pnorm = np.log(8) + scipy.special.gammaln(hz/2) - 3*np.log(R0) - 0.5*np.log(np.pi) - scipy.special.gammaln((hz-3)/2)
     log_pnorm = nu_norm(hz)
 
@@ -255,7 +255,7 @@ def logmodel_perr_grad(sample, params, gmm=None, fid_pars=None, grad=False, degr
     transformed_params = combined_params(params, fid_pars, ncomponents=ncomponents)
 
     # Defined paramers
-    theta=fid_pars['lat_min']; Mx=fid_pars['Mmax']; R0=fid_pars['R0']
+    theta=fid_pars['lat_min']; Mx=fid_pars['Mmax']; R0=fid_pars['R0']; smax=fid_pars['smax']
 
     weights = np.zeros(ncomponents)
     logcmpts = np.zeros((len(pi_mu), ncomponents))
@@ -271,7 +271,8 @@ def logmodel_perr_grad(sample, params, gmm=None, fid_pars=None, grad=False, degr
                                                 Mms1=transformed_params[j]['Mms1'],
                                                 Mms2=transformed_params[j]['Mms2'],
                                                 Mto=transformed_params[j]['Mto'],
-                                                Mx=Mx, R0=R0, grad=grad, degree=degree)
+                                                Mx=Mx, R0=R0, smax=smax, grad=grad, degree=degree,
+                                                nu_norm=fid_pars['halomodel_nu_norm'])
 
         weights[j] = transformed_params[j]['w']
         if not grad:  logcmpts[:,j] = output
@@ -310,7 +311,7 @@ def logmodel_perr_grad(sample, params, gmm=None, fid_pars=None, grad=False, degr
     return logsumcmpts + 2*np.log(np.tan(theta)) + log_cos_lat, (grad_model.T*jacobian).T
 
 def log_expmodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
-                                Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, degree=20, grad=False, integral_test=False):
+                                Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, smax=np.inf, degree=20, grad=False, integral_test=False, nu_norm=None):
 
     ep1=1.3; ep2=2.3;
     a1=-ln10*(ep1-1)/(2.5*alpha1); a2=-ln10*(ep2-1)/(2.5*alpha2);
@@ -471,7 +472,7 @@ def expmodel_perr_d2logIJ_dp2_dn(p, beta, n, mu, err, transform='none', b=None, 
     elif transform=='logit_ab': return d2logI_dp2 - 1/(p-a)**2 - 1/(p-b)**2
 
 def log_halomodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
-                                Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, degree=20, grad=False, integral_test=False):
+                                Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, smax=np.inf, degree=20, grad=False, integral_test=False, nu_norm=None):
 
     ep1=1.3; ep2=2.3;
     a1=-ln10*(ep1-1)/(2.5*alpha1); a2=-ln10*(ep2-1)/(2.5*alpha2);
@@ -493,7 +494,8 @@ def log_halomodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1.,
     log_AG = np.log(-alpha3) + np.log(1-fD)
 
     beta = abs_sin_lat/R0
-    log_pnorm = np.log(8) + scipy.special.gammaln(hz/2) - 3*np.log(R0) - 0.5*np.log(np.pi) - scipy.special.gammaln((hz-3)/2)
+    # log_pnorm = np.log(8) + scipy.special.gammaln(hz/2) - 3*np.log(R0) - 0.5*np.log(np.pi) - scipy.special.gammaln((hz-3)/2)
+    log_pnorm = nu_norm(hz)
 
     # Absolute magnitude not known
     Mag_bounds = [-np.inf, Mto, Mms2, Mms1, Mx]
@@ -516,40 +518,46 @@ def log_halomodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1.,
 
         n = Mag_n[ii]
         a = np.exp((Mag_bounds[ii  ]+10-m_mu)*ln10/5)
+        a = np.where((1./smax)<a, a, 1./smax)
         b = np.exp((Mag_bounds[ii+1]+10-m_mu)*ln10/5)
+        smax_subset = np.argwhere(a<b)[:,0]
+        # print(f"{ii} subset {np.sum(1/smax<a)}, {len(smax_subset)}/{len(a)}")
 
         # Gauss - Hermite Quadrature
         args = (beta, n*np.ones(len(pi_mu)), hz*np.ones(len(pi_mu)), pi_mu, pi_err, a, b)
-        p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad, a=a+1e-15, b=b, args=np.array(args))
-        curve = halomodel_perr_d2logIJ_dp2(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
-                                    functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
+        args = [arg[smax_subset] for arg in args]
+        p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad, a=args[-2]+1e-15, b=args[-1], args=np.array(args))
+        curve = halomodel_perr_d2logIJ_dp2(p_mode, *args[:-2], transform='logit_ab', a=args[-2], b=args[-1]) / \
+                                    functions.jac(p_mode, transform='logit_ab', a=args[-2], b=args[-1])**2
 
         z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
         sigma = 1/np.sqrt(-curve)
-        p_integral = functions.integrate_gh_gap(halomodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=degree)
+        p_integral = functions.integrate_gh_gap(halomodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=args[-2], b=args[-1], degree=degree)
         p_model[ii] = p_integral.copy()
 
         if grad:
             delta=1e-8
             # Gauss - Hermite Quadrature
             args = (beta, n*np.ones(len(pi_mu)), (hz+delta)*np.ones(len(pi_mu)), pi_mu, pi_err, a, b)
-            p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad, a=a+1e-15, b=b, args=np.array(args))
+            args = [arg[smax_subset] for arg in args]
+            p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad, a=args[-2]+1e-15, b=args[-1], args=np.array(args))
             curve = halomodel_perr_d2logIJ_dp2(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
                                         functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
 
             z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
             sigma = 1/np.sqrt(-curve)
-            p_integral = functions.integrate_gh_gap(halomodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=degree)
+            p_integral = functions.integrate_gh_gap(halomodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=args[-2], b=args[-1], degree=degree)
             dp_model_dhz[ii] = (p_integral-p_model[ii])/delta
             # Gauss - Hermite Quadrature
             args = (beta, (n+delta)*np.ones(len(pi_mu)), hz*np.ones(len(pi_mu)), pi_mu, pi_err, a, b)
-            p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad, a=a+1e-15, b=b, args=np.array(args))
+            args = [arg[smax_subset] for arg in args]
+            p_mode = functions.get_fooroots_ridder_hm(halomodel_perr_logit_grad, a=args[-2]+1e-15, b=args[-1], args=np.array(args))
             curve = halomodel_perr_d2logIJ_dp2(p_mode, *args[:-2], transform='logit_ab', a=a, b=b) / \
                                         functions.jac(p_mode, transform='logit_ab', a=a, b=b)**2
 
             z_mode = functions.trans(p_mode, transform='logit_ab', a=a, b=b)
             sigma = 1/np.sqrt(-curve)
-            p_integral = functions.integrate_gh_gap(halomodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=a, b=b, degree=degree)
+            p_integral = functions.integrate_gh_gap(halomodel_perr_integrand, z_mode, sigma, args[:-2], transform='logit_ab', a=args[-2], b=args[-1], degree=degree)
             dp_model_dn[ii] = (p_integral-p_model[ii])/delta
 
     log_p = scipy.special.logsumexp(Mag_norm, b=p_model, axis=0)
@@ -560,7 +568,9 @@ def log_halomodel_perr_grad(pi_mu, pi_err, abs_sin_lat, m_mu, log_pi_err, hz=1.,
 
     grad_lambda = np.zeros((pi_mu.shape[0], 6)) + np.nan
     # hz
-    grad_lambda[:,0] = scipy.special.digamma(hz/2)/2 - scipy.special.digamma((hz-3)/2)/2 + np.sum(dp_model_dhz*np.exp(Mag_norm), axis=0)/exp_log_p
+    # grad_lambda[:,0] = scipy.special.digamma(hz/2)/2 - scipy.special.digamma((hz-3)/2)/2 + np.sum(dp_model_dhz*np.exp(Mag_norm), axis=0)/exp_log_p
+    dhz = hz*1e-5
+    grad_lambda[:,0] = (nu_norm(hz+dhz)-nu_norm(hz))/dhz + np.sum(dp_model_dhz*np.exp(Mag_norm), axis=0)/exp_log_p
     # alpha3
     grad_lambda[:,1] = np.exp(Mag_norm[0])*((1/alpha3 + Mto+10-m_mu)*p_model[0] - 5/ln10*dp_model_dn[0])/exp_log_p
     # fD
@@ -846,7 +856,8 @@ def integral_model_gaiaSF_grad(params, bins=None, fid_pars=None, gsftest=None, t
                                     hz=transformed_params[j]['hz'],
                                     alpha1=transformed_params[j]['alpha1'], alpha2=transformed_params[j]['alpha2'], alpha3=transformed_params[j]['alpha3'],
                                     fD=transformed_params[j]['fD'], Mto=transformed_params[j]['Mto'], Mms=transformed_params[j]['Mms'],
-                                    Mx=fid_pars['Mmax'], R0=fid_pars['R0'], theta=fid_pars['lat_min'], grad=grad)
+                                    Mx=fid_pars['Mmax'], R0=fid_pars['R0'], smax=fit_pars['smax'], theta=fid_pars['lat_min'], grad=grad,
+                                    nu_norm=fid_pars['halomodel_nu_norm'])
 
         if grad:
             _uni_grid, _uni_grid_grad = _uni_grid_integral
@@ -883,8 +894,8 @@ def integral_model_gaiaSF_grad(params, bins=None, fid_pars=None, gsftest=None, t
 
 def gaiasf_integrand_disk_grad(m, sinb, _selectionfunction,
                           hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
-                          Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27,
-                          theta=np.pi/3, test=False, grad=False):
+                          Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, smax=np.inf,
+                          theta=np.pi/3, test=False, grad=False, nu_norm=None):
 
     # Overall normalisation
     norm = 2*np.tan(theta)**2
@@ -1025,8 +1036,8 @@ def gaiasf_integrand_disk_grad(m, sinb, _selectionfunction,
 
 def gaiasf_integrand_halo_grad(m, sinb, _selectionfunction,
                           hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
-                          Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27,
-                          theta=np.pi/3, test=False, grad=False):
+                          Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, smax=np.inf,
+                          theta=np.pi/3, test=False, grad=False, nu_norm=None):
 
     # Overall normalisation
     norm = 2*np.tan(theta)**2
@@ -1064,13 +1075,18 @@ def gaiasf_integrand_halo_grad(m, sinb, _selectionfunction,
         dalphag_dalpha2 = ( 1/alpha2 + (Mms-Mms2))/(Mms1-Mms2)
 
     # Normalisation of halo component
-    gam_norm = 4*numba_special.vec_gamma(hz/2,hz/2)/(R0**3 * np.sqrt(np.pi) * numba_special.vec_gamma((hz-3)/2,(hz-3)/2))
+    # gam_norm = 4*numba_special.vec_gamma(hz/2,hz/2)/(R0**3 * np.sqrt(np.pi) * numba_special.vec_gamma((hz-3)/2,(hz-3)/2))
+    gam_norm = np.exp(nu_norm(hz))
 
     # Distance of magnitude break
     sx = np.exp((m - (Mx+10))*np.log(10)/5)
     sms1 = np.exp((m - (Mms1+10))*np.log(10)/5)
     sms2 = np.exp((m - (Mms2+10))*np.log(10)/5)
     sto = np.exp((m - (Mto+10))*np.log(10)/5)
+    sx = np.where(sx<smax, sx, smax)
+    sms1 = np.where(sms1<smax, sms1, smax)
+    sms2 = np.where(sms2<smax, sms2, smax)
+    sto = np.where(sto<smax, sto, smax)
     # Exponential disk profile distance powers
     t1 = 2+5*alpha1/np.log(10)
     tg = 2+5*alphag/np.log(10)
@@ -1113,7 +1129,9 @@ def gaiasf_integrand_halo_grad(m, sinb, _selectionfunction,
 
         if grad:
             # hz
-            dlngamnorm_dhz = 0.5 * (scipy.special.digamma(hz/2) - scipy.special.digamma((hz-3)/2))
+            # dlngamnorm_dhz = 0.5 * (scipy.special.digamma(hz/2) - scipy.special.digamma((hz-3)/2))
+            dhz = hz*1e-5
+            dlngamnorm_dhz = (nu_norm(hz+dhz)-nu_norm(hz))/dhz
             dhalo1_dhz = -0.5 * halo_integration_gaussquad(sx *sinb[j]/R0, sms1*sinb[j]/R0, t1, hz, grad="gamma")
             dhalog_dhz = -0.5*halo_integration_gaussquad(sms1 *sinb[j]/R0, sms2*sinb[j]/R0, tg, hz, grad="gamma")
             dhalo2_dhz = -0.5*halo_integration_gaussquad(sms2*sinb[j]/R0, sto*sinb[j]/R0, t2, hz, grad="gamma")
@@ -1216,7 +1234,8 @@ def integral_model_subgaiaSF_grad(params, bins=None, fid_pars=None, gsftest=None
                                     hz=transformed_params[j]['hz'],
                                     alpha1=transformed_params[j]['alpha1'], alpha2=transformed_params[j]['alpha2'], alpha3=transformed_params[j]['alpha3'],
                                     fD=transformed_params[j]['fD'], Mto=transformed_params[j]['Mto'], Mms=transformed_params[j]['Mms'],
-                                    Mx=fid_pars['Mmax'], R0=fid_pars['R0'], theta=fid_pars['lat_min'], grad=grad)
+                                    Mx=fid_pars['Mmax'], R0=fid_pars['R0'], smax=fid_pars['smax'], theta=fid_pars['lat_min'], grad=grad,
+                                    nu_norm=fid_pars['halomodel_nu_norm'])
 
         if grad:
             integrand, integrand_grad = integrand
@@ -1261,8 +1280,8 @@ def integral_model_subgaiaSF_grad(params, bins=None, fid_pars=None, gsftest=None
 
 def subgaiasf_integrand_disk_grad(m, sinb,
                           hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
-                          Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27,
-                          theta=np.pi/3, test=False, grad=False):
+                          Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, smax=np.inf,
+                          theta=np.pi/3, test=False, grad=False, nu_norm=None):
 
     # Overall normalisation
     norm = 2*np.tan(theta)**2
@@ -1389,8 +1408,8 @@ def subgaiasf_integrand_disk_grad(m, sinb,
 
 def subgaiasf_integrand_halo_grad(m, sinb,
                           hz=1., alpha1=-1., alpha2=-1., alpha3=-1.,
-                          Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27,
-                          theta=np.pi/3, test=False, grad=False):
+                          Mto=4., Mms=8., Mms1=9., Mms2=7., fD=0.5, Mx=10., R0=8.27, smax=np.inf,
+                          theta=np.pi/3, test=False, grad=False, nu_norm=None):
 
     # Overall normalisation
     norm = 2*np.tan(theta)**2
@@ -1428,13 +1447,18 @@ def subgaiasf_integrand_halo_grad(m, sinb,
         dalphag_dalpha2 = ( 1/alpha2 + (Mms-Mms2))/(Mms1-Mms2)
 
     # Normalisation of halo component
-    gam_norm = 4*numba_special.vec_gamma(hz/2,hz/2)/(R0**3 * np.sqrt(np.pi) * numba_special.vec_gamma((hz-3)/2,(hz-3)/2))
+    # gam_norm = 4*numba_special.vec_gamma(hz/2,hz/2)/(R0**3 * np.sqrt(np.pi) * numba_special.vec_gamma((hz-3)/2,(hz-3)/2))
+    gam_norm = np.exp(nu_norm(hz))/2
 
     # Distance of magnitude break
     sx = np.exp((m - (Mx+10))*np.log(10)/5)
     sms1 = np.exp((m - (Mms1+10))*np.log(10)/5)
     sms2 = np.exp((m - (Mms2+10))*np.log(10)/5)
     sto = np.exp((m - (Mto+10))*np.log(10)/5)
+    sx = np.where(sx<smax, sx, smax)
+    sms1 = np.where(sms1<smax, sms1, smax)
+    sms2 = np.where(sms2<smax, sms2, smax)
+    sto = np.where(sto<smax, sto, smax)
     # Exponential disk profile distance powers
     t1 = 2+5*alpha1/np.log(10)
     tg = 2+5*alphag/np.log(10)
@@ -1469,7 +1493,9 @@ def subgaiasf_integrand_halo_grad(m, sinb,
 
         if grad:
             # hz
-            dlngamnorm_dhz = 0.5 * (scipy.special.digamma(hz/2) - scipy.special.digamma((hz-3)/2))
+            # dlngamnorm_dhz = 0.5 * (scipy.special.digamma(hz/2) - scipy.special.digamma((hz-3)/2))
+            dhz = hz*1e-5
+            dlngamnorm_dhz = (nu_norm(hz+dhz)-nu_norm(hz))/dhz
             dhalo1_dhz = -0.5 * halo_integration_gaussquad(sx *sinb[j]/R0, sms1*sinb[j]/R0, t1, hz, grad="gamma")
             dhalog_dhz = -0.5*halo_integration_gaussquad(sms1 *sinb[j]/R0, sms2*sinb[j]/R0, tg, hz, grad="gamma")
             dhalo2_dhz = -0.5*halo_integration_gaussquad(sms2*sinb[j]/R0, sto*sinb[j]/R0, t2, hz, grad="gamma")
