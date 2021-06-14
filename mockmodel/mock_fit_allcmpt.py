@@ -26,13 +26,14 @@ if __name__=='__main__':
     times = []; checkpoints = []
     times.append(time.time()); checkpoints.append('start')
 
-    run_id=24
-    size = 500000
+    run_id=25
+    size = 200000
     file = "sample_dr3asf"
     # Load Sample
     sample = {}; true_pars={}; latent_pars={};
-    smax = np.inf
+    smax = np.inf#160
     magcuts = [-100,200]
+    utils_directory = '/data/asfe2/Projects/mwtrace_data/utils'
     filename="/data/asfe2/Projects/mwtrace_data/mockmodel/%s.h" % file
     with h5py.File(filename, 'r') as hf:
         print('low', np.sum(hf['sample']['m'][...]<magcuts[0]))
@@ -52,10 +53,21 @@ if __name__=='__main__':
                 for par in hf['true_pars'][key].keys():
                     true_pars[int_idx(key)][par]=hf['true_pars'][key][par][...]
     for j in range(3): true_pars[j]['w']*=size
+
+
+
     true_pars['smax'] = smax
     print(sample.keys())
+    # Function for halo spatial model normalisation
+    halo_norm_smax = dh_msto.halomodel_dist_trunc(smax, true_pars['theta_deg'], true_pars['R0'], directory=utils_directory)
+    halo_norm_inf = dh_msto.halomodel_dist_trunc(np.inf, true_pars['theta_deg'], true_pars['R0'], directory=utils_directory)
+    print('w rescale', np.exp(- halo_norm_smax(true_pars[2]['hz']) + halo_norm_inf(true_pars[2]['hz'])))
+    true_pars[2]['w'] *= np.exp(- halo_norm_smax(true_pars[2]['hz']) + halo_norm_inf(true_pars[2]['hz']))
+    Nsub = np.sum([true_pars[j]['w'] for j in range(3)])
+    for j in range(3): true_pars[j]['w'] *= size/Nsub
 
-    if False:
+
+    if True:
         # Apply Gaia Selection Function
         from selectionfunctions.carpentry import chisel
         import selectionfunctions.cog_ii as CoGii
@@ -75,23 +87,24 @@ if __name__=='__main__':
         sample['astsf_subset'] = sf_utils.apply_subgaiasf(sample['l'], np.arcsin(sample['sinb']),
                                                           sample['m'], dr2_sf=dr3_sf, sub_sf=ast_sf, _nside=ast_sf.nside)[0]
         # Set to zero as no astrometry error model beyond G=21.45
-        sample['astsf_subset'][sample['m']>21.45] == 0.
+        sample['astsf_subset'][sample['m']>21.45] = False
 
         message = f"""\n{run_id:03d} ---> {file}, Sample size: {size:d}, SF subset: {np.sum(sample['gaiasf_subset']):d}, SF ast subset: {np.sum(sample['astsf_subset']):d}
-                     11 free parameters. hz_halo limited [3.,7.3]. logw [0,30]. all alpha3 fixed. dirichlet alpha=2.
+                     11 free parameters. hz_halo limited [2.,7.3]. logw [0,30]. all alpha3 fixed. dirichlet alpha=2.
                      perr gradient evaluation made numerically. ftol=1e-12, gtol=1e-7. When lnp=nan in mcmc - return 1e-20.
                      Selection Function: Gaia EDR3 Scanning Law Parent, Astrometry Selection Function nside64,jmax5 - grid method.
                      Parallax error: From ASF.
-                     Testing mask code."""
+                     Testing distance truncation. smax={smax}kpc"""
 
         print("Nan parallax error: ", np.sum(np.isnan(sample['parallax_error'])))
         print("Nan perr in subset: ", np.sum(sample['astsf_subset']&np.isnan(sample['parallax_error'])))
+        print("Nan perr mag: ", sample['m'][sample['astsf_subset']&np.isnan(sample['parallax_error'])])
 
-    message = f"""\n{run_id:03d} ---> {file}, Sample size: {size:d},
-                 11 free parameters. hz_halo limited [3.,7.3]. logw [0,30]. all alpha3 fixed. dirichlet alpha=2.
-                 perr gradient evaluation made numerically. ftol=1e-12, gtol=1e-7. When lnp=nan in mcmc - return 1e-20.
-                 Parallax error: From ASF.
-                 Testing distance trunctation: smax{smax}"""
+    # message = f"""\n{run_id:03d} ---> {file}, Sample size: {size:d},
+    #              11 free parameters. hz_halo limited [3.,7.3]. logw [0,30]. all alpha3 fixed. dirichlet alpha=2.
+    #              perr gradient evaluation made numerically. ftol=1e-12, gtol=1e-7. When lnp=nan in mcmc - return 1e-20.
+    #              Parallax error: From ASF.
+    #              Testing distance trunctation: smax{smax}"""
 
     # true_pars = true_pars
     # sample = sample
@@ -124,8 +137,7 @@ if __name__=='__main__':
     param_trans[2] = {'w':('exp',0,0,0,30,'dirichlet',a_dirichlet),
                       'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
                       'alpha3':('nexp',0,0,-1,0,'none'),
-                      'hz': ('logit_scaled', 3.,  7.3,-10,10,'logistic')}
-    utils_directory = '/data/asfe2/Projects/mwtrace_data/utils'
+                      'hz': ('logit_scaled', 2.,  7.3,-10,10,'logistic')}
 
     times.append(time.time()); checkpoints.append('initialised')
 
@@ -138,7 +150,7 @@ if __name__=='__main__':
         model_sf_err = mwfit(free_pars=free_pars, fixed_pars=true_pars, sample=sample, sf_bool=True, perr_bool=True, sub_sf=True, param_trans=param_trans)
         model_sf_err.sample['sf_subset'] = sample['astsf_subset'].copy()
         #model_sf_err.sample['sf_subset'] = sample['gaiasf_subset'].copy()
-        model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside)
+        model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside, directory=utils_directory)
         model_sf_err._generate_kwargs()
         print('bounds:\n', model_sf_err.poisson_kwargs['param_bounds'])
 
@@ -164,7 +176,7 @@ if __name__=='__main__':
 
         model_sf = mwfit(free_pars=free_pars, fixed_pars=true_pars, sample=sample, sf_bool=True, perr_bool=False, sub_sf=True, param_trans=param_trans)
         model_sf.sample['sf_subset'] = sample['astsf_subset'].copy()
-        model_sf._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside)
+        model_sf._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside, directory=utils_directory)
         model_sf._generate_kwargs()
         print('bounds:\n', model_sf.poisson_kwargs['param_bounds'])
 
@@ -183,7 +195,7 @@ if __name__=='__main__':
 
         times.append(time.time()); checkpoints.append('Astrometry SF selected')
 
-    if True:
+    if False:
         save_file = f'/data/asfe2/Projects/mwtrace_data/mockmodel/mock_{file}_{size:d}_full_{run_id:03d}.h'
         if os.path.exists(save_file):
             raise ValueError('File %s already exists...')
@@ -199,34 +211,40 @@ if __name__=='__main__':
         print("True likelihood: ", model_full.evaluate_likelihood(true_params_f))
         print(true_params_f, end="\n")
         # Optimize with BFGS
-        model_full.optimize_parallel(niter=2, ncores=2, label='full_bfgs', method='L-BFGS-B', verbose=True, minimize_options={'disp':False})
+        model_full.optimize_parallel(niter=10, ncores=10, label='full_bfgs', method='L-BFGS-B', verbose=True, minimize_options={'disp':False})
         # Run MCMC
-        model_full.mcmc(ncores=2, nsteps=nstep_all, label='full_mcmc', optimize_label='full_bfgs')
+        model_full.mcmc(ncores=20, nsteps=nstep_all, label='full_mcmc', optimize_label='full_bfgs')
         # Save results
         model_full.save(save_file, true_pars, mode='w')
 
         times.append(time.time()); checkpoints.append('full sample')
 
-    if False:
+    if True:
         save_file = f'/data/asfe2/Projects/mwtrace_data/mockmodel/mock_{file}_{size:d}_sf_perrHOT_{run_id:03d}.h'
         if os.path.exists(save_file):
             raise ValueError('File %s already exists...')
 
         model_sf_err = mwfit(free_pars=free_pars, fixed_pars=true_pars, sample=sample, sf_bool=True, perr_bool=True, sub_sf=True, param_trans=param_trans)
         model_sf_err.sample['sf_subset'] = sample['astsf_subset'].copy()
-        model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside)
+        model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside, directory=utils_directory)
         model_sf_err._generate_kwargs()
         print('bounds:\n', model_sf_err.poisson_kwargs['param_bounds'])
+        # Sample from prior
+        model_sf_err.mcmc_prior()
         # Check true parameters
         true_params_f = model_sf_err.transform_params(model_sf_err.get_true_params(true_pars))
         print("True likelihood: ", model_sf_err.evaluate_likelihood(true_params_f))
         print(true_params_f, end="\n")
         # Run MCMC
-        model_sf_err.mcmc(ncores=40, p0=true_params_f, nsteps=1000, label='sf_perr_mcmc', optimize_label='sf_perr_bfgs')
+        model_sf_err.mcmc(ncores=60, p0=true_params_f, nsteps=1000, label='sf_perr_mcmc', optimize_label='sf_perr_bfgs')
         # Save results
         model_sf_err.save(save_file, true_pars, mode='w')
 
         times.append(time.time()); checkpoints.append('SF and parallax error HOT')
+
+
+
+
 
     # if False: ### Original SF method
     #     save_file = f'/data/asfe2/Projects/mwtrace_data/mockmodel/mock_{file}_{size:d}_sf_{run_id:03d}.h'

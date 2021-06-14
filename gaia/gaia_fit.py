@@ -76,13 +76,13 @@ if __name__=='__main__':
     times = []; checkpoints = []
     times.append(time.time()); checkpoints.append('start')
 
-    run_id=9
-    size = "full" # 100000 # "full" #
+    run_id=10
+    size = 100000 # "full" #
     #file = "gaia"
     #file = "gaia_edr3.gaia_source_b80"
     file = "gaia_unwise_sdssspec_b80";
     extra_cols = ['bp_rp', 'w1', 'w2', 'phot_bp_rp_excess_factor_c']
-    cardinal = "south"
+    cardinal = "north"
     # Load Sample
     filename="/data/asfe2/Projects/mwtrace_data/gaia/%s.h" % file
     #keys = {'phot_g_mean_mag':'phot_g_mean_mag', 'parallax':'parallax', 'b':'b', 'parallax_error':'parallax_error', }
@@ -127,22 +127,26 @@ if __name__=='__main__':
         for key in sample.keys():
             sample[key] = sample[key][subset]
 
+    smax=160
+    utils_directory = '/data/asfe2/Projects/mwtrace_data/utils'
+
     # Drop out message
     message = f"""\n{run_id:03d} ---> {file}, {cardinal}, p-perr<10^((22-G)/5) or Parallax SNR<1, 5<G<12, Sample size: {len(sample['source_id']):d}
-                 11 free parameters. hz_halo limited [3.,7.3]. all alpha3 fixed. dirichlet alpha=2.
+                 11 free parameters. hz_halo limited [2.,7.3]. all alpha3 fixed. dirichlet alpha=2.
                  perr gradient evaluation made numerically. ftol=1e-12, gtol=1e-7. When lnp=nan in mcmc - return 1e-20.
                  Gaia SF: EDR3 (from Scanning Law)
                  Astrometry SF: {map_fname}.
                  Sculptor and NGC288 masks: {masks.flatten()}.
-                 Filtered extragalactic objects. """
+                 Filtered extragalactic objects.
+                 smax={smax}kpc"""
     print(message)
-    raise KeyboardInterrupt()
+
     with open(f'/data/asfe2/Projects/mwtrace_data/gaia/messages.txt', 'a') as f:
         f.write(message)
 
     # {'alpha1', 'alpha2'}
     shared_pars = {'Mms1':9, 'Mms':8, 'Mms2':7}
-    fixed_pars = {'Mx':12, 'R0':8.27, 'theta_deg':80, 'Mms1':9, 'Mms':8, 'Mms2':7,
+    fixed_pars = {'Mx':12, 'R0':8.27, 'theta_deg':80, 'Mms1':9, 'Mms':8, 'Mms2':7, 'smax':smax,
                   0:dict({'alpha3':-0.6, 'Mto':3.1}, **shared_pars),
                   1:dict({'alpha3':-0.73, 'Mto':3.1}, **shared_pars),
                   2:dict({'alpha3':-0.64, 'Mto':3.1}, **shared_pars),
@@ -172,7 +176,7 @@ if __name__=='__main__':
     param_trans[2] = {'w':('exp',0,0,-10,50,'dirichlet',a_dirichlet),
                       'fD': ('logit_scaled', 0,1,-10,10,'logistic'),
                       'alpha3':('nexp',0,0,-1,0,'none'),
-                      'hz': ('logit_scaled', 3.,  7.3,-10,10,'logistic')}
+                      'hz': ('logit_scaled', 2.,  7.3,-10,10,'logistic')}
 
     times.append(time.time()); checkpoints.append('initialised')
 
@@ -188,7 +192,7 @@ if __name__=='__main__':
 
             model_sf_err = mwfit(free_pars=free_pars, fixed_pars=fixed_pars, sample=sample, sf_bool=True, perr_bool=True, sub_sf=True, param_trans=param_trans)
             model_sf_err.sample['sf_subset'] = np.ones(len(sample['m'])).astype(bool)
-            model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside, masks=masks)
+            model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside, masks=masks, directory=utils_directory)
             model_sf_err._generate_kwargs()
             print('bounds:\n', model_sf_err.poisson_kwargs['param_bounds'])
 
@@ -210,7 +214,7 @@ if __name__=='__main__':
             model_sf_err = mwfit(free_pars=free_pars, fixed_pars=fixed_pars, sample=sample, sf_bool=True, perr_bool=True, sub_sf=True, param_trans=param_trans)
             model_sf_err.sample['sf_subset'] = np.ones(len(sample['m'])).astype(bool)
             model_sf_err.load(save_file)
-            model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside, masks=masks)
+            model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside, masks=masks, directory=utils_directory)
             model_sf_err._generate_kwargs()
             print('bounds:\n', model_sf_err.poisson_kwargs['param_bounds'])
 
@@ -238,7 +242,7 @@ if __name__=='__main__':
 
             model_sf_err = mwfit(free_pars=free_pars, fixed_pars=fixed_pars, sample=sample, sf_bool=True, perr_bool=True, sub_sf=True, param_trans=param_trans)
             model_sf_err.sample['sf_subset'] = np.ones(len(sample['m'])).astype(bool)
-            model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside, masks=masks)
+            model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside, masks=masks, directory=utils_directory)
             model_sf_err._generate_kwargs()
             print('bounds:\n', model_sf_err.poisson_kwargs['param_bounds'])
 
@@ -260,7 +264,7 @@ if __name__=='__main__':
             model_sf_err = mwfit(free_pars=free_pars, fixed_pars=fixed_pars, sample=sample, sf_bool=True, perr_bool=True, sub_sf=True, param_trans=param_trans)
             model_sf_err.sample['sf_subset'] = np.ones(len(sample['m'])).astype(bool)
             model_sf_err.load(save_file)
-            model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside, masks=masks)
+            model_sf_err._generate_fid_pars(dr2_sf=dr3_sf, sub_sf=ast_sf, _m_grid=ast_sf.Mbins, _nside=ast_sf.nside, masks=masks, directory=utils_directory)
             model_sf_err._generate_kwargs()
             print('bounds:\n', model_sf_err.poisson_kwargs['param_bounds'])
 
