@@ -1202,7 +1202,7 @@ def appmag_model_subgaiaSF(params, fid_pars=None, sf=True):
                                     hz=transformed_params[j]['hz'],
                                     alpha1=transformed_params[j]['alpha1'], alpha2=transformed_params[j]['alpha2'], alpha3=transformed_params[j]['alpha3'],
                                     fD=transformed_params[j]['fD'], Mto=transformed_params[j]['Mto'], Mms=transformed_params[j]['Mms'],
-                                    Mx=fid_pars['Mmax'], R0=fid_pars['R0'], theta=fid_pars['lat_min'], grad=False)
+                                    Mx=fid_pars['Mmax'], R0=fid_pars['R0'], theta=fid_pars['lat_min'], grad=False, nu_norm=fid_pars['halomodel_nu_norm'])
 
         # Summing over pixels is pretty fast!
         if sf: integrand = integrand[gsf_pars['idx_sinb_pixels']]*gsf_pars['_selectionfunction']

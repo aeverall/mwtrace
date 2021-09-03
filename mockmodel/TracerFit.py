@@ -522,6 +522,8 @@ def poisson_like(params, bounds=None, grad=False, test=False):
         print(params)
         raise
 
+    print(np.sum(obj), -integral, prior)
+
     if not grad:
         if test: return obj, integral, prior
         model_val = np.sum(obj) - integral + prior

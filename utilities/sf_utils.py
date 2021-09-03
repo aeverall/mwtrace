@@ -172,7 +172,7 @@ def masked_gaiasf_pars(theta=np.pi/3, _nside=32, dr2_sf=None, sub_sf=None, masks
     _sfprob = gaia_sf(_alpha, _beta, _n, _m)
     print('Ast SF:', gg.shape)
     # Sub SF prob
-    if sub_sf is not None: _sfprob *= sub_sf(coords, grid=False)
+    if sub_sf is not None: _sfprob *= sub_sf(coords, grid=True)
 
 
     gsf_pars={'uni_sinb_pixels':uni_sinb_pixels, 'idx_sinb_pixels':idx_sinb_pixels,

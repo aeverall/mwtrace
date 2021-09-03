@@ -90,9 +90,9 @@ def plot_chains(sampler, truths=None, labels=None, functions=None, clean_chains=
     plt.subplots_adjust(hspace=0.01)
 
 def layered_corners(samplers, labels=None, index=None, savefolder=None, savefile=None,
-                functions=None, truths=None, fig=None, ax=None,
-                colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
-                linestyles=['-']*10, pad=0.1, **corner_kwargs):#, rng=None):
+                functions=None, truths=None, fig=None, ax=None, alphas=[1.0]*10,
+                colors=plt.rcParams['axes.prop_cycle'].by_key()['color'], legend_kwargs={},
+                linestyles=['-']*10, pad=0.1, legend_on=True, rng=None, **corner_kwargs):
 
     if type(samplers[0])==np.ndarray: chains=[sampler.copy() for sampler in samplers]
     else: chains=[sampler.chain.copy() for sampler in samplers]
@@ -104,25 +104,32 @@ def layered_corners(samplers, labels=None, index=None, savefolder=None, savefile
 
     if ax is None: fig, ax = plt.subplots(ndim,ndim, figsize=(8,8), sharex='col')
 
-    corner_kwargs = dict({'max_n_ticks':4, 'title_kwargs':{"fontsize": 15}, 'label_kwargs':{'fontsize':15},
+    corner_kwargs = dict({'max_n_ticks':4, 'title_kwargs':{"fontsize": 15}, 'label_kwargs':{'fontsize':15},  'label_coords':{'x':(0.5,-0.5), 'y':(-0.5,0.5)},
                                             'plot_contours':True, 'fill_contours':True, 'smooth':2, 'bins':50,
                                             'data_kwargs':{'alpha':0.}, 'truth_color':'k'}, **corner_kwargs)
 
     for i, chain in enumerate(chains):
-        flatchain = chain[:,int(chain.shape[1]/2):,:].reshape(-1,chain.shape[2])
+        flatchain = chain[:,int(chain.shape[1]/2)::5,:].reshape(-1,chain.shape[2])
         for j in range(chain.shape[2]):
             if functions[j] is not None:
                 flatchain[:,j]=functions[j](flatchain[:,j])
         if i==0:
-            rng = np.vstack((np.min(flatchain, axis=0), np.max(flatchain, axis=0))).T
+            data_rng = np.vstack((np.min(flatchain, axis=0), np.max(flatchain, axis=0))).T
         else:
             min_chain = np.min(flatchain, axis=0)
             max_chain = np.max(flatchain, axis=0)
-            rng = np.vstack((np.min(np.vstack((rng[:,0], min_chain)), axis=0),
-                             np.max(np.vstack((rng[:,1], max_chain)), axis=0))).T
-    diff = rng[:,1]-rng[:,0]
-    rng[:,1] += diff*pad
-    rng[:,0] -= diff*pad
+            data_rng = np.vstack((np.min(np.vstack((data_rng[:,0], min_chain)), axis=0),
+                             np.max(np.vstack((data_rng[:,1], max_chain)), axis=0))).T
+    diff = data_rng[:,1]-data_rng[:,0]
+    data_rng[:,1] += diff*pad
+    data_rng[:,0] -= diff*pad
+    if rng is None:
+        rng = data_rng.copy()
+    else:
+        rng = np.vstack(( np.max(np.vstack((data_rng[:,0], rng[:,0])), axis=0),
+                          np.min(np.vstack((data_rng[:,1], rng[:,1])), axis=0) )).T
+    # rng = [[max(x.min(), range[0][0]), min(x.max(), range[0][1])],
+    #        [max(y.min(), range[1][0]), min(y.max(), range[1][1])]]
 
     if truths is not None:
         truths_f = truths.copy()
@@ -142,10 +149,10 @@ def layered_corners(samplers, labels=None, index=None, savefolder=None, savefile
                 flatchain[:,j]=functions[j](flatchain[:,j])
 
         corner_new(flatchain, fig=fig, range=rng, color=colors[i], linestyle=linestyles[i], truths=truths_f,
-                            labels=labels, index=index[i], **corner_kwargs);
+                            labels=labels, index=index[i], alpha=alphas[i], **corner_kwargs);
 
         plt.sca(ax[0,0])
-        plt.legend(bbox_to_anchor=(1.05, 1.0), frameon=False)
+        if legend_on: plt.legend(frameon=False, **legend_kwargs)
 
         if savefolder is not None:
             if i==0:
@@ -154,14 +161,14 @@ def layered_corners(samplers, labels=None, index=None, savefolder=None, savefile
 
 
 
-def corner_new(xs, bins=20, range=None, weights=None, color="k", linestyle='-',
+def corner_new(xs, bins=20, range=None, weights=None, color="k", linestyle='-', alpha=1.0,
            smooth=None, smooth1d=None,
-           labels=None, label_kwargs=None, index=None,
+           labels=None, label_kwargs=None, label_coords=None, index=None,
            show_titles=False, title_fmt=".2f", title_kwargs=None,
            truths=None, truth_color="#4682b4",
            scale_hist=False, quantiles=None, verbose=False, fig=None,
            max_n_ticks=5, top_ticks=False, use_math_text=False,
-           hist_kwargs=None, functions=None, **hist2d_kwargs):
+           hist_kwargs=None, contourf_kwargs=None, functions=None, **hist2d_kwargs):
 
 
     if quantiles is None:
@@ -320,6 +327,7 @@ def corner_new(xs, bins=20, range=None, weights=None, color="k", linestyle='-',
 
         ax.set_yticklabels([])
         ax.xaxis.set_major_locator(MaxNLocator(max_n_ticks, prune="lower"))
+        ax.set_xlim(range[i])
 
         if i < K - 1:
             if top_ticks:
@@ -331,7 +339,7 @@ def corner_new(xs, bins=20, range=None, weights=None, color="k", linestyle='-',
             [l.set_rotation(45) for l in ax.get_xticklabels()]
             if labels is not None:
                 ax.set_xlabel(labels[i], **label_kwargs)
-                ax.xaxis.set_label_coords(0.5, -0.3)
+                ax.xaxis.set_label_coords(*label_coords['x'])#0.5, -0.5)
 
             # use MathText for axes ticks
             ax.xaxis.set_major_formatter(
@@ -355,8 +363,8 @@ def corner_new(xs, bins=20, range=None, weights=None, color="k", linestyle='-',
                 y = y.compressed()
 
             hist2d(y, x, ax=ax, range=[range[j], range[i]], weights=weights,
-                   color=color, linestyle=linestyle, smooth=smooth, bins=[bins[j], bins[i]],
-                   **hist2d_kwargs)
+                   color=color, linestyle=linestyle, smooth=smooth, bins=[bins[j], bins[i]], alpha=alpha,
+                   countourf_kwargs=contourf_kwargs, **hist2d_kwargs)
 
             if truths is not None:
                 if truths[i] is not None and truths[j] is not None:
@@ -375,7 +383,7 @@ def corner_new(xs, bins=20, range=None, weights=None, color="k", linestyle='-',
                 [l.set_rotation(45) for l in ax.get_xticklabels()]
                 if labels is not None:
                     ax.set_xlabel(labels[j], **label_kwargs)
-                    ax.xaxis.set_label_coords(0.5, -0.3)
+                    ax.xaxis.set_label_coords(*label_coords['x'])#0.5, -0.5)
 
                 # use MathText for axes ticks
                 ax.xaxis.set_major_formatter(
@@ -387,7 +395,7 @@ def corner_new(xs, bins=20, range=None, weights=None, color="k", linestyle='-',
                 [l.set_rotation(45) for l in ax.get_yticklabels()]
                 if labels is not None:
                     ax.set_ylabel(labels[i], **label_kwargs)
-                    ax.yaxis.set_label_coords(-0.3, 0.5)
+                    ax.yaxis.set_label_coords(*label_coords['y'])#(-0.5, 0.5)
 
                 # use MathText for axes ticks
                 ax.yaxis.set_major_formatter(
@@ -399,7 +407,7 @@ def corner_new(xs, bins=20, range=None, weights=None, color="k", linestyle='-',
 def hist2d(x, y, bins=20, range=None, weights=None, levels=None, smooth=None,
            ax=None, color=None, linestyle='-', plot_datapoints=True, plot_density=True,
            plot_contours=True, no_fill_contours=False, fill_contours=False,
-           contour_kwargs=None, contourf_kwargs=None, data_kwargs=None,
+           contour_kwargs=None, contourf_kwargs=None, data_kwargs=None, alpha=1.0,
            **kwargs):
     """
     Plot a 2-D histogram of samples.
@@ -481,8 +489,8 @@ def hist2d(x, y, bins=20, range=None, weights=None, levels=None, smooth=None,
     rgba_color = colorConverter.to_rgba(color)
     contour_cmap = [list(rgba_color) for l in levels] + [list(rgba_color)]
     for i, l in enumerate(levels):
-        contour_cmap[i][-1] *= 0.5 * float(i) / (len(levels)+1)
-    contour_cmap[i+1][-1] *= 0.5
+        contour_cmap[i][-1] *= 0.5 * float(i) / (len(levels)+1) * alpha
+    contour_cmap[i+1][-1] *= 0.5 * alpha
 
     # We'll make the 2D histogram to directly estimate the density.
     try:
@@ -577,8 +585,9 @@ def hist2d(x, y, bins=20, range=None, weights=None, levels=None, smooth=None,
     if plot_contours:
         if contour_kwargs is None:
             contour_kwargs = dict()
-        contour_kwargs["colors"] = [contour_kwargs.get("colors", color)]
-        ax.contour(X2, Y2, H2.T, V, linestyles=linestyle, **contour_kwargs)
+        #contour_kwargs["colors"] = [contour_kwargs.get("colors", color)]
+        #print(color)
+        ax.contour(X2, Y2, H2.T, V, linestyles=linestyle, colors=[color], **contour_kwargs)
 
     ax.set_xlim(range[0])
     ax.set_ylim(range[1])
