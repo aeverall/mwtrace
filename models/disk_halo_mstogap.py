@@ -1184,13 +1184,13 @@ def gaiasf_integrand_halo_grad(m, sinb, _selectionfunction,
 
     return _uni_grid, full_grad_I
 
-def appmag_model_subgaiaSF(params, fid_pars=None, sf=True):
+def appmag_model_subgaiaSF(params, fid_pars=None, gsf_pars=None, sf=True):
 
     # Input Parameters
     ncomponents=fid_pars['ncomponents']
     transformed_params = combined_params(params, fid_pars, ncomponents=ncomponents)
 
-    gsf_pars = fid_pars['gsf_pars']
+    if gsf_pars is None: gsf_pars = fid_pars['gsf_pars']
 
     integralcmpts = np.zeros((ncomponents, len(gsf_pars['_m_grid'])))
     weights = np.zeros(ncomponents)
